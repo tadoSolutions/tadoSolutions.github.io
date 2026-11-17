@@ -193,6 +193,20 @@ label,.lab,.hint,.who,.q .txt small,.jrow .n small,.crew .n small,.hist{font-siz
 }
 .btn.ghost.danger{color:var(--err);border-color:#e9a3a3}.btn.ghost.danger:hover{background:#fff0f0}
 .cfm p{margin:8px 0;font-size:15.5px}.cfm{margin-bottom:6px}
+
+/* waiting indicator */
+#pbar{position:fixed;left:0;right:0;top:0;height:3px;z-index:90;overflow:hidden;pointer-events:none;display:none;background:rgba(255,255,255,.35)}
+#pbar i{position:absolute;top:0;bottom:0;width:35%;left:-35%;background:#6ea0ff}
+body.waiting #pbar{display:block}body.waiting #pbar i{animation:pbar 1.1s linear infinite}
+@keyframes pbar{to{left:100%}}
+body.waiting .btn{pointer-events:none;opacity:.55}
+body.waiting .btn.wait{opacity:1;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+body.waiting .btn.block.wait{display:flex}
+.spin{width:16px;height:16px;flex:none;border-radius:50%;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;animation:spin .7s linear infinite}
+.btn.ghost .spin{border-color:rgba(27,47,110,.25);border-top-color:var(--navy)}
+@keyframes spin{to{transform:rotate(360deg)}}
+#slow{white-space:nowrap;position:fixed;left:50%;transform:translateX(-50%);top:62px;z-index:85;background:#111827;color:#fff;font-size:13.5px;padding:8px 12px;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.25);max-width:92vw}
+@media(prefers-reduced-motion:reduce){body.waiting #pbar i{animation-duration:2.4s}.spin{animation-duration:1.6s}}
 </style>
 </head>
 <body>
@@ -3030,14 +3044,44 @@ function when(iso) { if (!iso) return ''; var d = new Date(iso); return d.toLoca
 
 /** Calls the server. In Apps Script this is google.script.run; in the offline demo the server code runs in the page. */
 function rpc(action, payload) {
-  setBusy(1);
+  var shown = !QUIET[action];                          // background refreshes do not show the waiting indicator
+  setBusy(1); if (shown) waitUi(1);
   return new Promise(function (resolve, reject) {
-    function done(r) { setBusy(-1); if (r && r.ok) resolve(r.data); else reject(new Error((r && r.error) || 'No response from the server')); }
+    function done(r) { setBusy(-1); if (shown) waitUi(-1); if (r && r.ok) resolve(r.data); else reject(new Error((r && r.error) || 'No response from the server')); }
     if (window.google && google.script && google.script.run) {
-      google.script.run.withSuccessHandler(done).withFailureHandler(function (e) { setBusy(-1); reject(new Error('Connection problem. Check your internet and try again.')); }).api(action, payload);
-    } else if (BOOT.api) fetch(BOOT.api, { method: 'POST', body: JSON.stringify({ action: action, payload: payload || {} }) }).then(function (r) { return r.json(); }).then(done, function () { setBusy(-1); reject(new Error('Connection problem. Check your internet and try again.')); });
+      google.script.run.withSuccessHandler(done).withFailureHandler(function (e) { setBusy(-1); if (shown) waitUi(-1); reject(new Error('Connection problem. Check your internet and try again.')); }).api(action, payload);
+    } else if (BOOT.api) fetch(BOOT.api, { method: 'POST', body: JSON.stringify({ action: action, payload: payload || {} }) }).then(function (r) { return r.json(); }).then(done, function () { setBusy(-1); if (shown) waitUi(-1); reject(new Error('Connection problem. Check your internet and try again.')); });
     else setTimeout(function () { try { done(JSON.parse(JSON.stringify(window.api(action, JSON.parse(JSON.stringify(payload || {})))))); } catch (e) { done({ ok: false, error: e.message }); } }, 60);
   });
+}
+/* ---- waiting indicator: shows that a tap has been sent to the server and the page is waiting for the answer.
+   1. the tapped button shows a spinner and a waiting label, 2. a thin bar moves under the top of the page,
+   3. other buttons ignore taps until it finishes, 4. after 6 seconds a line says it is still working. */
+var QUIET = { poll: 1, dashboard: 1, template: 1 }, WAIT = { n: 0, btn: null, html: '', last: null, slow: 0 };
+var GERUND = { sign: 'Signing', send: 'Sending', resend: 'Sending', create: 'Creating', 'delete': 'Deleting', approve: 'Approving', 'return': 'Returning', submit: 'Submitting',
+  join: 'Joining', start: 'Starting', 'continue': 'Loading', unlock: 'Unlocking', recall: 'Recalling', change: 'Changing', save: 'Saving', close: 'Closing', reopen: 'Reopening',
+  open: 'Opening', remove: 'Removing', email: 'Sending', download: 'Preparing' };
+document.addEventListener('click', function (e) { var b = e.target.closest && e.target.closest('button'); if (b) WAIT.last = { el: b, t: Date.now() }; }, true);
+function waitLabel(text) {
+  var w = String(text || '').trim().split(/\s+/), g = GERUND[(w[0] || '').toLowerCase()];
+  if (!g) return 'Working…';
+  return (w.length <= 2 ? g + (w[1] ? ' ' + w[1] : '') : g) + '…';
+}
+function waitUi(d) {
+  WAIT.n = Math.max(0, WAIT.n + d);
+  var bar = document.getElementById('pbar');
+  if (!bar) { bar = el('<div id="pbar"><i></i></div>'); document.body.appendChild(bar); }
+  if (WAIT.n && !document.body.classList.contains('waiting')) {
+    document.body.classList.add('waiting');
+    var l = WAIT.last, b = l && Date.now() - l.t < 1500 && document.body.contains(l.el) && l.el.classList.contains('btn') ? l.el : null;
+    if (b && !b.classList.contains('wait')) { WAIT.btn = b; WAIT.html = b.innerHTML; b.classList.add('wait'); b.innerHTML = '<span class="spin"></span><span>' + h(waitLabel(b.textContent)) + '</span>'; }
+    clearTimeout(WAIT.slow);
+    WAIT.slow = setTimeout(function () { if (WAIT.n && !document.getElementById('slow')) document.body.appendChild(el('<div id="slow">Still working. Keep this page open.</div>')); }, 6000);
+  } else if (!WAIT.n) {
+    document.body.classList.remove('waiting'); clearTimeout(WAIT.slow);
+    var s = document.getElementById('slow'); if (s) s.remove();
+    if (WAIT.btn) { if (document.body.contains(WAIT.btn) && WAIT.btn.classList.contains('wait')) { WAIT.btn.classList.remove('wait'); WAIT.btn.innerHTML = WAIT.html; } WAIT.btn = null; }
+  }
 }
 function setBusy(n) { G.busy = Math.max(0, G.busy + n); var d = document.querySelector('.dot'); if (d) d.className = 'dot' + (G.offline ? ' off' : G.busy || hasPending() ? ' busy' : ''); }
 function toast(msg, kind, ms) {
