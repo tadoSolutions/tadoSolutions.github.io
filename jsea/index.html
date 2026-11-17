@@ -2839,6 +2839,9 @@ async function buildJseaPdf(PDFLib, templateBytes, doc, opts) {
   var prep = (doc.members || []).filter(function (m) { return m.id === doc.preparerId; })[0] || {};
   txt(p1, prep.name, 97, 133.4, { size: 9, w: 92 });
   if (doc.approval) { txt(p1, doc.approval.name, 260, 133.4, { size: 9, w: 228 }); sign(p1, doc.approval.strokes, 523, 124.3, 775, 136.6); }
+  /* "Isolated, Try Start Performed. Verified by:" at the foot of page 1. As on the completed forms: first Trainer box the
+     trainer's name, second Trainer box the trainer's signature. The other two boxes are left for a witness. */
+  if (doc.approval) { txt(p1, doc.approval.name, 302.5, 518.6, { size: 8, w: 79, min: 5.5 }); sign(p1, doc.approval.strokes, 428, 509.3, 509, 521.6); }
   if (doc.review) {
     txt(p1, doc.review.name, 99.5, 146.4, { size: 9, w: 90 });
     txt(p1, fmtDate(doc.review.at), 258, 146.4, { size: 9, w: 110 });
