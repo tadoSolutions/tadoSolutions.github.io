@@ -3334,6 +3334,15 @@ function refresh(old) {
   if (jump) { window.scrollTo(0, 0); return; }        // a different screen (locked, submitted, returned): start at its top
   if (fk) { var n = document.querySelector('[data-k="' + fk + '"]'); if (n && n.focus) { n.focus(); try { n.setSelectionRange(ss, se); } catch (e) {} window.scrollTo(0, sy); } }
 }
+/* Responsible person: chosen by tapping "All" or one or more crew members. Stored as text, e.g. "Alex Stone, Sam Lee". */
+function respList(v) { return String(v || '').split(/\s*,\s*/).filter(Boolean); }
+function respName(m) { return m.name.replace(/,/g, ' ').replace(/\s+/g, ' ').trim(); }
+function respOptions(v) {
+  var o = ['All'].concat(G.doc.members.map(respName));
+  respList(v).forEach(function (x) { if (o.indexOf(x) < 0) o.push(x); });       // someone no longer in the crew, or an older typed entry: shown so it can be removed
+  return o;
+}
+function respChip(nm, on) { return '<button class="chip' + (on ? ' on' : '') + '" data-act="resp" data-v="' + h(nm) + '">' + h(nm) + '</button>'; }
 function patch() {
   var pno = document.getElementById('pno'); if (pno && G.doc) pno.value = G.doc.permit || G.doc.f.permitNo || '';   // reissued when the trainer changes the site
   document.querySelectorAll('#main [data-k]').forEach(function (e) {
@@ -3342,6 +3351,12 @@ function patch() {
     v = getVal(k);
     if (e.classList.contains('seg')) { e.querySelectorAll('button').forEach(function (b) { b.classList.toggle('on', b.dataset.v === v); }); var q = e.closest('.q'); if (q) q.classList.toggle('miss', !v); return; }
     if (e.classList.contains('chip')) return e.classList.toggle('on', v === 'Y');
+    if (e.classList.contains('resp')) {
+      var cur = respList(v), have = [].map.call(e.children, function (b) { return b.dataset.v; });
+      cur.forEach(function (x) { if (have.indexOf(x) < 0) e.insertAdjacentHTML('beforeend', respChip(x, true)); });
+      [].forEach.call(e.children, function (b) { b.classList.toggle('on', cur.indexOf(b.dataset.v) >= 0); });
+      return;
+    }
     if (e === document.activeElement || isDirty(k)) return;
     if (e.value !== v) { e.value = v; if (e.tagName === 'TEXTAREA') grow(e); }
   });
@@ -3421,8 +3436,8 @@ function drawMain0() {
             '<div class="rr"><button class="risk" data-act="risk" data-k="r:' + st.id + ':' + hz.id + ':i"></button></div><label>Control measures (one per line)</label>' + area(b + 'control', 'How will you eliminate or reduce the risk?', 2) +
             '<div class="rr"><button class="risk" data-act="risk" data-k="r:' + st.id + ':' + hz.id + ':r"></button></div>' + (st.hazards.length > 1 ? '<button class="link red" data-act="hazDel" data-id="' + st.id + ':' + hz.id + '">Remove this hazard</button>' : '') + '</div>';
         }).join('') + '<button class="link" data-act="hazAdd" data-id="' + st.id + '">+ Add another hazard to this step</button>' +
-        '<label>Responsible person</label>' + inp('s:' + st.id + ':resp', 'Who makes sure this step is done safely?', 60) +
-        '<div class="chips" style="margin-top:6px">' + ['All'].concat(d.members.map(function (x) { return x.name; })).map(function (nm) { return '<button class="chip" style="padding:5px 10px;font-size:13px" data-act="resp" data-id="' + st.id + '" data-v="' + h(nm) + '">' + h(nm) + '</button>'; }).join('') + '</div></div></div>' +
+        '<label>Responsible person <span style="font-weight:400">(tap one or more)</span></label><div class="chips resp" data-k="s:' + st.id + ':resp">' +
+        respOptions(st.resp).map(function (nm) { return respChip(nm, respList(st.resp).indexOf(nm) >= 0); }).join('') + '</div></div></div>' +
         '<button class="addstep" data-act="stepAdd" data-id="' + st.id + '">+ Insert a step here</button>';
     });
   } else {
@@ -3586,7 +3601,12 @@ document.addEventListener('click', function (e) {
   else if (a === 'seg') { var k = b.parentNode.dataset.k; setVal(k, getVal(k) === b.dataset.v ? '' : b.dataset.v, true); patch(); drawTabs(); }
   else if (a === 'chip') { setVal(b.dataset.k, getVal(b.dataset.k) === 'Y' ? '' : 'Y', true); patch(); }
   else if (a === 'fill') { var n = { permit: 7, have: 6, high: 8, haz: 23 }[id]; for (var i = 0; i < n; i++) if (!getVal('f:' + id + '.' + i)) setVal('f:' + id + '.' + i, b.dataset.v, true); patch(); drawTabs(); }
-  else if (a === 'resp') { setVal('s:' + id + ':resp', b.dataset.v, true); patch(); drawTabs(); drawIssues(); }
+  else if (a === 'resp') {
+    var rk = b.parentNode.dataset.k, rv = b.dataset.v, cur = respList(getVal(rk)), at;
+    if (rv === 'All') cur = cur.length === 1 && cur[0] === 'All' ? [] : ['All'];
+    else { cur = cur.filter(function (x) { return x !== 'All'; }); at = cur.indexOf(rv); if (at >= 0) cur.splice(at, 1); else cur.push(rv); }
+    setVal(rk, cur.join(', '), true); patch(); drawTabs(); drawIssues();
+  }
   else if (a === 'risk') {
     var p = b.dataset.k.split(':'), res = p[3] === 'r', base = 'h:' + p[1] + ':' + p[2] + ':', n2 = d.steps.map(function (s) { return s.id; }).indexOf(p[1]) + 1;
     matrix({ title: (res ? 'Residual risk' : 'Risk rating') + ' – step ' + n2, l: getVal(base + (res ? 'rl' : 'l')), s: getVal(base + (res ? 'rs' : 's')), pick: function (l, s) { setVal(base + (res ? 'rl' : 'l'), l, true); setVal(base + (res ? 'rs' : 's'), s, true); patch(); drawTabs(); drawIssues(); } });
