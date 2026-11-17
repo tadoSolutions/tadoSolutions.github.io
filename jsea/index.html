@@ -207,6 +207,18 @@ body.waiting .btn.block.wait{display:flex}
 @keyframes spin{to{transform:rotate(360deg)}}
 #slow{white-space:nowrap;position:fixed;left:50%;transform:translateX(-50%);top:62px;z-index:85;background:#111827;color:#fff;font-size:13.5px;padding:8px 12px;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.25);max-width:92vw}
 @media(prefers-reduced-motion:reduce){body.waiting #pbar i{animation-duration:2.4s}.spin{animation-duration:1.6s}}
+
+/* finishing overlay (approve > PDF > save > email) */
+.finov{position:fixed;inset:0;z-index:95;background:rgba(17,24,39,.55);display:flex;align-items:center;justify-content:center;padding:16px}
+.finbox{background:#fff;border-radius:14px;padding:20px 22px;width:100%;max-width:360px;box-shadow:0 12px 40px rgba(0,0,0,.3)}
+.finbox h2{margin:0 0 2px}.finbox .hint{margin:0}
+.fintrack{height:6px;border-radius:3px;background:#e6eaf2;margin:12px 0 6px;overflow:hidden}
+.fintrack i{display:block;height:100%;width:0;background:var(--blue);transition:width .4s}
+.finst{display:flex;align-items:center;gap:10px;padding:7px 0;font-size:15px;color:#98a2b3}
+.finst.now{color:var(--ink)}.finst.done{color:var(--ok)}
+.finic{width:20px;height:20px;flex:none;border-radius:50%;border:2px solid #d0d5dd;display:flex;align-items:center;justify-content:center;font-size:13px;line-height:1}
+.finst.now .finic{border-color:#c9d6f5;border-top-color:var(--blue);animation:spin .7s linear infinite}
+.finst.done .finic{border-color:var(--ok);background:var(--ok);color:#fff}
 </style>
 </head>
 <body>
@@ -3875,13 +3887,48 @@ function makePdf(d) {
   var tpl = G.tpl ? Promise.resolve() : rpc('template', { tt: G.tt }).then(function (r) { G.tpl = b64ToBytes(r.b64); });
   return Promise.all([lib, tpl]).then(function () { return buildJseaPdf(window.PDFLib, G.tpl, d, { record: BOOT.record !== false }); });
 }
+/* ---- finishing overlay: approving is the longest wait in the app (record the approval, build the PDF in this browser,
+   save it and email it), so the screen is covered and each step is ticked off as it completes. The time it took is
+   remembered on this device, so the "usually takes about N seconds" line comes from real runs, not a guess. */
+var FIN = null;
+function finTimes() { try { return JSON.parse(store('jsea_fin_ms') || '[]').filter(function (x) { return x > 0; }); } catch (e) { return []; } }
+function finOpen(labels) {
+  finClose();
+  var t = finTimes(), avg = t.length ? t.reduce(function (a, b) { return a + b; }, 0) / t.length : 0, secs = Math.max(5, Math.round(avg / 5000) * 5);
+  var o = el('<div class="finov" role="alertdialog" aria-live="polite"><div class="finbox"><h2>Finishing the JSEA</h2><p class="hint">' +
+    (avg ? 'This usually takes about ' + secs + ' seconds. ' : '') + 'Keep this page open.</p><div class="fintrack"><i></i></div>' +
+    labels.map(function (l) { return '<div class="finst"><span class="finic"></span><span>' + h(l) + '</span></div>'; }).join('') + '</div></div>');
+  document.body.appendChild(o);
+  FIN = { o: o, labels: labels, at: Date.now(), i: -1, full: labels.length > 2 };
+  finStep(0);
+}
+function finStep(i) {
+  if (!FIN) return;
+  FIN.i = i;
+  [].forEach.call(FIN.o.querySelectorAll('.finst'), function (s, k) { s.className = 'finst' + (k < i ? ' done' : k === i ? ' now' : ''); s.firstChild.textContent = k < i ? '\u2713' : ''; });
+  FIN.o.querySelector('.fintrack i').style.width = Math.round(i / FIN.labels.length * 100) + '%';
+}
+/** Closes the overlay. ok = it finished, so the time is remembered (full approvals only). Returns the step it was on. */
+function finClose(ok) {
+  if (!FIN) return '';
+  var f = FIN, at = f.labels[Math.min(f.i, f.labels.length - 1)]; FIN = null; f.o.remove();
+  if (ok && f.full) { var t = finTimes(); t.push(Date.now() - f.at); store('jsea_fin_ms', JSON.stringify(t.slice(-5))); }
+  return at;
+}
+function finLabels(d, withApproval) {
+  var n = d.members.length, last = 'Saving to Drive and emailing ' + (n === 1 ? d.members[0].name : n + ' students');
+  return (withApproval ? ['Recording your approval'] : []).concat(['Building the PDF on the EIM form', last]);
+}
 function sendPdf() {
   var d = G.tDoc; G.tActing = true;
-  toast('Building the PDF on the EIM form…', '', 20000);
-  return makePdf(d).then(function (bytes) { return rpc('finalise', { tt: G.tt, id: d.id, b64: bytesToB64(bytes) }); }).then(function (r) {
+  if (!FIN) finOpen(finLabels(d, false));              // "Send PDF" on its own, after an earlier attempt did not finish
+  var base = FIN.labels.length - 2; finStep(base);
+  return makePdf(d).then(function (bytes) { finStep(base + 1); return rpc('finalise', { tt: G.tt, id: d.id, b64: bytesToB64(bytes) }); }).then(function (r) {
+    finStep(base + 2);
+    setTimeout(function () { finClose(true); }, 500);
     G.tActing = false; G.tDoc = r.doc; drawJsea();
     toast(r.sent.length ? 'PDF emailed to ' + r.sent.join(', ') : 'PDF saved, but no email could be sent (daily email limit reached). Send it again tomorrow.', r.sent.length ? 'good' : 'err', 8000);
-  }, function (e) { G.tActing = false; fail(e); drawJsea(); });
+  }, function (e) { var at = finClose(false); G.tActing = false; fail(new Error('Stopped at "' + at + '". ' + e.message + ' The JSEA is approved; use Send PDF to try again.')); drawJsea(); });
 }
 function trainerClick(a, id, b) {
   var d = G.tDoc;
@@ -3941,9 +3988,10 @@ function trainerClick(a, id, b) {
   else if (a === 'tApprove') {
     askSignature((d.mode === 'crew' ? 'Approve' : 'Review and approve') + ' – ' + G.T.name, 'I have checked this JSEA and approve the work to proceed under these controls.', G.T.sig).then(function (st) {
       G.tActing = true;
+      finOpen(finLabels(d, true));
       if (st !== G.T.sig) { G.T.sig = st; tStore(G.T); rpc('saveSig', { tt: G.tt, strokes: st }).catch(function () {}); }
       return rpc('decide', { tt: G.tt, id: d.id, rev: d.rev, decision: 'approve', strokes: st });
-    }).then(function (r) { G.tDoc = r.doc; drawJsea(); return sendPdf(); }).catch(function (e) { G.tActing = false; tFail(e); tJsea(d.id, true); });
+    }).then(function (r) { G.tDoc = r.doc; drawJsea(); return sendPdf(); }).catch(function (e) { finClose(false); G.tActing = false; tFail(e); tJsea(d.id, true); });
   }
   else if (a === 'tReturn') askNote('Return to ' + (d.mode === 'crew' ? d.crewName : d.members[0].name), 'The students see this note at the top of their JSEA. Be specific about what to fix.').then(function (note) { return rpc('decide', { tt: G.tt, id: d.id, rev: d.rev, decision: 'return', note: note }); }).then(function (r) { toast('Returned to the student' + (d.members.length > 1 ? 's' : '') + '.', ''); tSession(G.tSess.id); }, function (e) { tFail(e); tJsea(d.id, true); });
   else if (a === 'tPdf') { toast('Building the PDF…', '', 15000); makePdf(d).then(function (bytes) {
