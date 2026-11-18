@@ -2,8 +2,13 @@
 <html lang="en-AU">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="EIM JSEA">
+<meta name="theme-color" content="#1b2f6e">
 <meta name="robots" content="noindex">
+<link rel="manifest" href="manifest.webmanifest">
 <title>EIM Digital JSEA</title>
 <style>
 :root{--navy:#1b2f6e;--blue:#2f5fd0;--ink:#1c2230;--mute:#667085;--line:#d9dee8;--bg:#f3f5f9;--card:#fff;--ok:#0a8a4a;--warn:#b25e00;--err:#c62828;
@@ -202,8 +207,8 @@ body.waiting #pbar{display:block}body.waiting #pbar i{animation:pbar 1.1s linear
 body.waiting .btn{pointer-events:none;opacity:.55}
 body.waiting .btn.wait{opacity:1;display:inline-flex;align-items:center;justify-content:center;gap:8px}
 body.waiting .btn.block.wait{display:flex}
-.spin{width:16px;height:16px;flex:none;border-radius:50%;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;animation:spin .7s linear infinite}
-.btn.ghost .spin{border-color:rgba(27,47,110,.25);border-top-color:var(--navy)}
+.btn.wait .spin{width:16px;height:16px;flex:none;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;animation:spin .7s linear infinite;vertical-align:0}
+.btn.ghost.wait .spin{border-color:rgba(27,47,110,.25);border-top-color:var(--navy)}
 @keyframes spin{to{transform:rotate(360deg)}}
 #slow{white-space:nowrap;position:fixed;left:50%;transform:translateX(-50%);top:62px;z-index:85;background:#111827;color:#fff;font-size:13.5px;padding:8px 12px;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.25);max-width:92vw}
 @media(prefers-reduced-motion:reduce){body.waiting #pbar i{animation-duration:2.4s}.spin{animation-duration:1.6s}}
@@ -219,6 +224,18 @@ body.waiting .btn.block.wait{display:flex}
 .finic{width:20px;height:20px;flex:none;border-radius:50%;border:2px solid #d0d5dd;display:flex;align-items:center;justify-content:center;font-size:13px;line-height:1}
 .finst.now .finic{border-color:#c9d6f5;border-top-color:var(--blue);animation:spin .7s linear infinite}
 .finst.done .finic{border-color:var(--ok);background:var(--ok);color:#fff}
+
+/* the tab bar and the trainer's "needs your action" strip stay under the header while the page scrolls */
+#tabs{position:sticky;top:var(--toph,50px);z-index:19}
+#tabs .tabs{position:static}
+.pend{position:sticky;top:var(--toph,50px);z-index:19;background:#fff;border-bottom:1px solid var(--line)}
+.pend.has{background:#eef3ff;border-bottom-color:#c9d6f5}
+.pendh{display:flex;align-items:center;gap:10px;max-width:1180px;margin:0 auto;padding:2px 12px}
+.pendt{flex:1;display:flex;align-items:center;gap:8px;text-align:left;border:0;background:none;font-weight:700;font-size:14px;color:var(--navy);padding:8px 0;min-width:0}
+.pendt:disabled{color:var(--mute);font-weight:600}
+.pendt em{font-style:normal;flex:none;min-width:22px;height:22px;line-height:22px;border-radius:11px;background:#98a2b3;color:#fff;text-align:center;font-size:12.5px;padding:0 6px}
+.pend.has .pendt em{background:var(--err)}
+.pendl{max-width:1180px;margin:0 auto;padding:0 12px 8px;max-height:50vh;overflow:auto}
 </style>
 </head>
 <body>
@@ -2560,6 +2577,12 @@ var FORM = {
     ['OTHER', 'Any other hazard not listed above.']],
   cop: ['Hazardous Substances', 'Electrical Practices for construction work', 'Excavation', 'Manual Handling', 'Moving Plant on Construction Sites',
     'Noise Management & protection of hearing', 'Work in hot and cold environments', 'Work near overhead power lines', 'Prevention of falls in workplace', 'Abrasive Blasting'],
+  /* Legislation is the same for every EIM campus (all in Queensland), so it is chosen from buttons. */
+  leg: {
+    act: ['WHS Act 2011 (Qld)', 'Electrical Safety Act 2002 (Qld)'],
+    reg: ['WHS Regulation 2011 (Qld)', 'Electrical Safety Regulation 2013 (Qld)'],
+    legOther: ['AS/NZS 3000 Wiring Rules', 'AS/NZS 4836 Safe working on or near low-voltage', 'Coal Mining Safety and Health Act 1999 (Qld)']
+  },
   sev: ['Negligible', 'Low', 'Moderate', 'Significant', 'Catastrophic'],
   lik: ['Improbable', 'Remote', 'Occasional', 'Probable', 'Frequent'],
   /* Risk rating = likelihood x severity, banded exactly as page 2 of the form. */
@@ -2653,15 +2676,35 @@ function validate(d) {
     if (miss) err(k === 'haz' ? 'hazards' : 'checks', names[k] + ': ' + miss + ' item' + (miss > 1 ? 's' : '') + ' not answered');
   });
   HAVE.forEach(function (t, i) { if (f['have.' + i] === 'N') warn('checks', 'Not done before starting: ' + t); });
+  /* Compliance: answers that are never acceptable on a JSEA, whatever the task. These stop sign-on and submission. */
+  var any = function (k, n) { for (var i = 0; i < n; i++) if (f[k + '.' + i] === 'Y') return true; return false; };
+  var isolates = d.steps.some(function (st) { return /isolat|lock\s*(and|&|\/)?\s*tag|de-?energi[sz]|test(ed|ing)? for dead|prove (it )?dead/i.test(st.text || ''); }) || f['ppe.15'] === 'Y';
+  if (!f.act) err('details', 'Legislation: select the WHS Act that applies');
+  if (!f.reg) err('details', 'Legislation: select the WHS Regulation that applies');
+  if (!any('ppe', 16) && !f['ppeOther.0']) err('checks', 'PPE and safety equipment: select what this job needs');
+  if (f['permit.0'] === 'N') err('checks', 'Permit Required: every job needs a General permit. Set General to Yes');
+  if (isolates && f['permit.6'] === 'N') err('checks', 'Permit Required: this job involves isolation, so set Isolation to Yes');
+  var hazDone = true; for (var hi = 0; hi < LISTS.haz; hi++) if (!f['haz.' + hi]) hazDone = false;
+  if (hazDone && !any('haz', 24)) err('hazards', 'Potential Hazards: none are marked as present. Every job has hazards, so mark the ones that apply');
+  if (isolates && f['haz.12'] && f['haz.12'] !== 'Y') err('hazards', 'Potential Hazards: this job involves isolation, so ISOLATION must be marked as present');
+  if (isolates && f['haz.3'] && f['haz.3'] !== 'Y') warn('hazards', 'Potential Hazards: ELECTRICAL is marked not present, but the job involves isolation');
+  if (!any('cop', 10) && !f.copOther) err('checks', 'Codes of practice: select at least one that applies');
+  var EMPTY = /^(none|nil|nill|n\/?a|na|no|not applicable|nothing|-+|\.+)$/i;
   d.steps.forEach(function (st, n) {
     var lab = 'Step ' + (n + 1);
     if (!st.text) err('steps', lab + ': describe the job step', st.id);
     if (!st.resp) err('steps', lab + ': name the responsible person', st.id);
     st.hazards.forEach(function (h, m) {
       var hl = lab + (st.hazards.length > 1 ? ' hazard ' + (m + 1) : '');
-      if (!h.text) err('steps', hl + ': identify the hazard', st.id);
+      var ht = String(h.text || '').trim(), hc = String(h.control || '').trim();
+      if (!ht) err('steps', hl + ': identify the hazard', st.id);
+      else if (EMPTY.test(ht)) err('steps', hl + ': "' + ht + '" is not a hazard. Every step has at least one hazard to identify', st.id);
+      else if (ht.length < 4) err('steps', hl + ': describe the hazard in a few words', st.id);
       else if (!h.l || !h.s) err('steps', hl + ': set the risk rating', st.id);
-      if (h.text && !h.control) err('steps', hl + ': add a control measure', st.id);
+      if (ht && !hc) err('steps', hl + ': add a control measure', st.id);
+      else if (hc && EMPTY.test(hc)) err('steps', hl + ': "' + hc + '" is not a control measure. Say what will be done to control the hazard', st.id);
+      else if (hc && hc.toLowerCase() === ht.toLowerCase()) err('steps', hl + ': the control measure repeats the hazard. Say what will be done to control it', st.id);
+      else if (hc && hc.length < 8) err('steps', hl + ': describe the control measure (what will be done)', st.id);
       if (h.control && (!h.rl || !h.rs)) err('steps', hl + ': set the residual risk', st.id);
       var r = h.l * h.s, rr = h.rl * h.rs;
       if (r && rr) {
@@ -2822,12 +2865,12 @@ async function buildJseaPdf(PDFLib, templateBytes, doc, opts) {
     var cx = (x0 + x1) / 2, cy = (t0 + t1) / 2;
     line(pg, cx - 4, cy, cx - 1.2, cy + 3.2, 1.3); line(pg, cx - 1.2, cy + 3.2, cx + 4.5, cy - 4, 1.3);
   }
-  function mark(pg, v, x0, t0, x1, t1) {              // Y -> tick, anything else printed as text (N, NP)
+  function mark(pg, v, x0, t0, x1, t1) {              // answered yes -> a tick, answered no / not present -> n/a, not answered -> blank
     if (!v) return;
     if (v === 'Y') tick(pg, x0, t0, x1, t1);
-    else txt(pg, v, x0, (t0 + t1) / 2 + 2.8, { size: 7.5, bold: true, center: x1 - x0 });
+    else txt(pg, 'n/a', x0, (t0 + t1) / 2 + 2.6, { size: 7.5, center: x1 - x0 });
   }
-  function yn(pg, v, x0, t0, x1, t1) { if (v) txt(pg, v, x0, (t0 + t1) / 2 + 3, { size: 8.5, bold: true, center: x1 - x0 }); }
+  var yn = mark;
   function sign(pg, strokes, x0, t0, x1, t1) {        // pen strokes scaled to fill the cell
     if (!strokes || !strokes.length) return;
     var minx = 1e9, miny = 1e9, maxx = -1e9, maxy = -1e9;
@@ -2868,6 +2911,12 @@ async function buildJseaPdf(PDFLib, templateBytes, doc, opts) {
   /* "Isolated, Try Start Performed. Verified by:" at the foot of page 1. As on the completed forms: first Trainer box the
      trainer's name, second Trainer box the trainer's signature. The other two boxes are left for a witness. */
   if (doc.approval) { txt(p1, doc.approval.name, 302.5, 518.6, { size: 8, w: 79, min: 5.5 }); sign(p1, doc.approval.strokes, 428, 509.3, 509, 521.6); }
+  /* The four boxes are labelled "Trainer" on the blank form. They are relabelled Supervisor (name, signature) and
+     Witness (name, signature), as on the earlier EIM forms. */
+  [[266.6, 'Supervisor'], [389.0, 'Supervisor'], [516.6, 'Witness'], [650.2, 'Witness']].forEach(function (L) {
+    box(p1, L[0] - 1, 509.6, L[0] + 28.5, 520.8);
+    txt(p1, L[1], L[0] - 0.6, 517.6, { size: 6.4, bold: true });
+  });
   if (doc.review) {
     txt(p1, doc.review.name, 99.5, 146.4, { size: 9, w: 90 });
     txt(p1, fmtDate(doc.review.at), 258, 146.4, { size: 9, w: 110 });
@@ -2882,9 +2931,20 @@ async function buildJseaPdf(PDFLib, templateBytes, doc, opts) {
   for (i = 0; i < 7; i++) yn(p1, f['permit.' + i], 133, RT[i], 162, RT[i + 1]);
   for (i = 0; i < 6; i++) yn(p1, f['have.' + i], 358, RT[i], 391, RT[i + 1]);
   for (i = 0; i < 8; i++) yn(p1, f['high.' + i], 672, RT[i], 778, RT[i + 1]);
-  if (f.act) { box(p1, 174, 337.9, 277.2, 349.3); txt(p1, f.act, 176, 346.6, { size: 7, w: 99 }); }
-  if (f.reg) { box(p1, 174, 350.8, 277.2, 361.3); txt(p1, f.reg, 176, 359.2, { size: 7, w: 99 }); }
-  if (f.legOther) { var lo = wrap(f.legOther, font, 6.5, 80); txt(p1, lo[0], 309, 346.2, { size: 6.5 }); if (lo[1]) txt(p1, lo.slice(1).join(' '), 283, 357.5, { size: 6.5, w: 105 }); }
+  /* Legislation is chosen from buttons and can be more than one item. The boxes are small, so when several are chosen
+     they are printed in their usual short forms with the State once at the end. */
+  var SHORT = { 'WHS Act 2011 (Qld)': 'WHS Act 2011', 'Electrical Safety Act 2002 (Qld)': 'ES Act 2002', 'WHS Regulation 2011 (Qld)': 'WHS Reg 2011', 'Electrical Safety Regulation 2013 (Qld)': 'ES Reg 2013',
+    'AS/NZS 3000 Wiring Rules': 'AS/NZS 3000', 'AS/NZS 4836 Safe working on or near low-voltage': 'AS/NZS 4836', 'Coal Mining Safety and Health Act 1999 (Qld)': 'CMSH Act 1999 (Qld)' };
+  function leg(v) {
+    var a = String(v || '').split(/\s*,\s*/).filter(Boolean);
+    if (a.length < 2) return a[0] || '';
+    var q = a.every(function (x) { return / \(Qld\)$/.test(x); });
+    return a.map(function (x) { return (SHORT[x] || x).replace(q ? / \(Qld\)$/ : /^$/, ''); }).join(', ') + (q ? ' (Qld)' : '');
+  }
+  var lAct = leg(f.act), lReg = leg(f.reg), lOth = leg(f.legOther);
+  if (lAct) { box(p1, 174, 337.9, 277.2, 349.3); txt(p1, lAct, 176, 346.6, { size: 7, w: 99, min: 5 }); }
+  if (lReg) { box(p1, 174, 350.8, 277.2, 361.3); txt(p1, lReg, 176, 359.2, { size: 7, w: 99, min: 5 }); }
+  if (lOth) { var lo = wrap(lOth, font, 6.5, 80); txt(p1, lo[0], 309, 346.2, { size: 6.5 }); if (lo[1]) txt(p1, lo.slice(1).join(' '), 283, 357.5, { size: 6.5, w: 105 }); }
   var ET = [394, 409, 425, 440];
   for (i = 0; i < 6; i++) txt(p1, f['equip.' + i], (i % 2 ? 147 : 32) + 4, ET[(i >> 1) + 1] - 4.2, { size: 8, w: 108 });
   var CT = [462, 477, 492, 507], cs = [[0, 1], [1, 0], [1, 1], [2, 0], [2, 1]];
@@ -3066,10 +3126,25 @@ function rpc(action, payload) {
     else setTimeout(function () { try { done(JSON.parse(JSON.stringify(window.api(action, JSON.parse(JSON.stringify(payload || {})))))); } catch (e) { done({ ok: false, error: e.message }); } }, 60);
   });
 }
+/* The header's real height, so the bars that stick under it (tabs, trainer strip) sit exactly below it. */
+function setTopHeight() { var t = document.querySelector('.top'); if (t && t.offsetHeight) document.documentElement.style.setProperty('--toph', t.offsetHeight + 'px'); }
+window.addEventListener('resize', setTopHeight); setInterval(setTopHeight, 1500);
+/* Full screen on phones: Android browsers allow it after the first tap. iPhones do not allow a web page to hide the
+   address bar; there it hides itself on scrolling, or the page can be added to the home screen. Asked once per visit. */
+(function () {
+  var root = document.documentElement, asked = false;
+  var phone = window.matchMedia && matchMedia('(pointer:coarse)').matches && Math.min(screen.width, screen.height) < 820;
+  if (!phone || !root.requestFullscreen || /iPhone|iPad|iPod/.test(navigator.userAgent) || matchMedia('(display-mode: standalone)').matches) return;
+  document.addEventListener('click', function (e) {
+    if (asked || document.fullscreenElement || !(e.target.closest && e.target.closest('button'))) return;
+    asked = true;
+    try { var p = root.requestFullscreen({ navigationUI: 'hide' }); if (p && p.catch) p.catch(function () {}); } catch (x) {}
+  }, true);
+})();
 /* ---- waiting indicator: shows that a tap has been sent to the server and the page is waiting for the answer.
    1. the tapped button shows a spinner and a waiting label, 2. a thin bar moves under the top of the page,
    3. other buttons ignore taps until it finishes, 4. after 6 seconds a line says it is still working. */
-var QUIET = { poll: 1, dashboard: 1, template: 1 }, WAIT = { n: 0, btn: null, html: '', last: null, slow: 0 };
+var QUIET = { poll: 1, dashboard: 1, template: 1, pending: 1 }, WAIT = { n: 0, btn: null, html: '', last: null, slow: 0 };
 var GERUND = { sign: 'Signing', send: 'Sending', resend: 'Sending', create: 'Creating', 'delete': 'Deleting', approve: 'Approving', 'return': 'Returning', submit: 'Submitting',
   join: 'Joining', start: 'Starting', 'continue': 'Loading', unlock: 'Unlocking', recall: 'Recalling', change: 'Changing', save: 'Saving', close: 'Closing', reopen: 'Reopening',
   open: 'Opening', remove: 'Removing', email: 'Sending', download: 'Preparing' };
@@ -3298,7 +3373,7 @@ function announce(a, b) {
 
 /* ------------------------------------------------------------ student: start and join */
 function start() {
-  if (G.role === 'trainer') return trainerStart();
+  if (G.role === 'trainer' || (!G.code && G.role !== 'code')) return trainerStart();   // students arrive by QR code, so the bare address is the trainer's
   if (!G.code) return showCode();
   var tok = store('jsea_tok_' + G.code);
   if (tok) {
@@ -3312,6 +3387,7 @@ function showCode() {
     '<p></p><button class="btn block" id="go">Continue</button></div><p class="center"><button class="link" id="tr">Trainer sign in</button></p></div>';
   document.getElementById('go').onclick = function () { G.code = document.getElementById('code').value.trim().toUpperCase(); if (G.code) start(); };
   document.getElementById('tr').onclick = function () { G.role = 'trainer'; trainerStart(); };
+  document.getElementById('code').focus();
 }
 function showJoin() {
   $app.innerHTML = '<div class="wrap"><p class="center"><span class="spin"></span></p></div>';
@@ -3322,13 +3398,12 @@ function showJoin() {
     if (s.modes !== 'individual') modes += '<button class="chip" data-m="crew">Start a work crew</button>' + (r.crews.length ? '<button class="chip" data-m="join">Join a crew</button>' : '');
     $app.innerHTML = '<div class="top"><div class="row"><div class="t"><b>' + h(s.unit + ' ' + s.assess) + '</b><span>' + h(s.task || s.desc) + '</span></div></div></div><div class="wrap">' +
       (s.unitTitle ? '<p class="hint" style="margin:10px 2px 0"><b>' + h(s.unit) + '</b> ' + h(s.unitTitle) + '</p>' : '') +
-      (s.status !== 'open' ? '<div class="note warn"><b>This session is closed</b>Only students who already started a JSEA can get back in. Enter the same student ID and email you used.</div>' : '') +
+      (s.status !== 'open' ? '<div class="note warn"><b>This session is closed</b>Only students who already started a JSEA can get back in. Enter the same name and email you used.</div>' : '') +
       '<div class="card"><h2>Your details</h2><p class="hint">Trainer: ' + h(s.trainer) + (s.cohort ? ' · ' + h(s.cohort) : '') + ' · ' + h(s.date) + '</p>' +
       '<label>Full name (as enrolled)</label><input type="text" id="jn" autocomplete="name" value="' + h(me.name || '') + '">' +
-      '<label>Student ID</label><input type="text" id="ji" autocomplete="off" autocapitalize="characters" value="' + h(me.studentId || '') + '">' +
       '<label>Email for your approved PDF</label><input type="email" id="je" autocomplete="email" inputmode="email" value="' + h(me.email || '') + '">' +
-      '<p class="hint">The signed JSEA is emailed to this address, ready to upload to Cloud Assess. Already started? Enter the same student ID and email to continue where you left off.</p>' +
-      (me.name || me.studentId || me.email ? '<p class="hint"><button class="link" id="jx">Not you? Clear these details</button></p>' : '') + '</div>' +
+      '<p class="hint">The signed JSEA is emailed to this address, ready to upload to Cloud Assess. Already started? Enter the same name and email to continue where you left off.</p>' +
+      (me.name || me.email ? '<p class="hint"><button class="link" id="jx">Not you? Clear these details</button></p>' : '') + '</div>' +
       '<div class="card"><h2>How are you doing this JSEA?</h2><div class="chips" id="modes">' + modes + '</div>' +
       '<div id="mx"></div></div><div class="bar"><button class="btn" id="join">Start JSEA</button></div></div>';
     var mode = s.modes === 'crew' ? 'crew' : 'individual', crewId = '';
@@ -3343,12 +3418,12 @@ function showJoin() {
     }
     document.querySelectorAll('#modes .chip').forEach(function (b) { b.onclick = function () { pick(b.dataset.m); }; });
     pick(mode);
-    var jx = document.getElementById('jx'); if (jx) jx.onclick = function () { store('jsea_profile', null); ['jn', 'ji', 'je'].forEach(function (i) { document.getElementById(i).value = ''; }); jx.parentNode.remove(); document.getElementById('jn').focus(); };
+    var jx = document.getElementById('jx'); if (jx) jx.onclick = function () { store('jsea_profile', null); ['jn', 'je'].forEach(function (i) { document.getElementById(i).value = ''; }); jx.parentNode.remove(); document.getElementById('jn').focus(); };
     document.getElementById('join').onclick = function () {
-      var p = { code: G.code, name: val('jn'), studentId: val('ji'), email: val('je'), mode: mode, crewName: val('jc'), crewId: crewId, pin: val('jp') };
+      var p = { code: G.code, name: val('jn'), email: val('je'), mode: mode, crewName: val('jc'), crewId: crewId, pin: val('jp') };
       if (mode === 'join' && !crewId) return toast('Choose your crew first.', 'err');
       rpc('join', p).then(function (j) {
-        store('jsea_profile', JSON.stringify({ name: p.name, studentId: p.studentId, email: p.email }));
+        store('jsea_profile', JSON.stringify({ name: p.name, email: p.email }));
         store('jsea_tok_' + G.code, j.token); store('jsea_me_' + G.code, j.me);
         G.token = j.token; G.me = j.me; G.doc = j.doc; G.tab = 'details'; openDoc();
         if (j.doc.mode === 'crew' && j.doc.preparerId === j.me && j.doc.members.length === 1) crewPin();
@@ -3402,6 +3477,12 @@ function respOptions(v) {
   return o;
 }
 function respChip(nm, on) { return '<button class="chip' + (on ? ' on' : '') + '" data-act="resp" data-v="' + h(nm) + '">' + h(nm) + '</button>'; }
+/* A set of buttons where any number can be chosen. Stored as text, e.g. "WHS Act 2011 (Qld), Electrical Safety Act 2002 (Qld)". */
+function multi(key, options) {
+  var cur = respList(getVal(key)), all = options.slice();
+  cur.forEach(function (x) { if (all.indexOf(x) < 0) all.push(x); });           // an older typed entry: shown so it can be removed
+  return '<div class="chips multi" data-k="' + key + '">' + all.map(function (nm) { return respChip(nm, cur.indexOf(nm) >= 0); }).join('') + '</div>';
+}
 function patch() {
   var pno = document.getElementById('pno'); if (pno && G.doc) pno.value = G.doc.permit || G.doc.f.permitNo || '';   // reissued when the trainer changes the site
   document.querySelectorAll('#main [data-k]').forEach(function (e) {
@@ -3410,7 +3491,7 @@ function patch() {
     v = getVal(k);
     if (e.classList.contains('seg')) { e.querySelectorAll('button').forEach(function (b) { b.classList.toggle('on', b.dataset.v === v); }); var q = e.closest('.q'); if (q) q.classList.toggle('miss', !v); return; }
     if (e.classList.contains('chip')) return e.classList.toggle('on', v === 'Y');
-    if (e.classList.contains('resp')) {
+    if (e.classList.contains('resp') || e.classList.contains('multi')) {
       var cur = respList(v), have = [].map.call(e.children, function (b) { return b.dataset.v; });
       cur.forEach(function (x) { if (have.indexOf(x) < 0) e.insertAdjacentHTML('beforeend', respChip(x, true)); });
       [].forEach.call(e.children, function (b) { b.classList.toggle('on', cur.indexOf(b.dataset.v) >= 0); });
@@ -3451,11 +3532,11 @@ function ynList(key, items, title, hint) {
 function drawMain() {
   drawMain0();
   var d = G.doc, me = d && d.members.filter(function (m) { return m.id === G.me; })[0], m = document.getElementById('main');
-  if (me && m) m.insertAdjacentHTML('beforeend', '<p class="who">Signed in as <b>' + h(me.name) + '</b>' + (me.studentId ? ' (' + h(me.studentId) + ')' : '') + ' · <button class="link" data-act="notMe">Not you? Sign out</button></p>');
+  if (me && m) m.insertAdjacentHTML('beforeend', '<p class="who">Signed in as <b>' + h(me.name) + '</b> · <button class="link" data-act="notMe">Not you? Sign out</button></p>');
 }
 /** Forgets this person on this device. The JSEA itself is untouched: the same student ID and email get back in. */
 function signOutDevice() {
-  confirm2('Sign out on this device?\n\nYour JSEA is kept. To get back in, scan the QR code and enter the same student ID and email.', 'Sign out').then(settle).then(function () {
+  confirm2('Sign out on this device?\n\nYour JSEA is kept. To get back in, scan the QR code and enter the same name and email.', 'Sign out').then(settle).then(function () {
     store('jsea_profile', null); store('jsea_tok_' + G.code, null); store('jsea_me_' + G.code, null);
     G.token = null; G.me = null; G.doc = null; G.sig = null; G.dirty = {}; if (G.L) G.L.close(); G.room = null;
     showJoin(); toast('Signed out on this device.');
@@ -3471,8 +3552,8 @@ function drawMain0() {
     html += '<div class="card"><h2>Task</h2><label>Task name</label>' + inp('f:taskName') + '<label>Task description</label>' + area('f:taskDesc', '', 2) +
       '<div class="grid2"><div><label>Business unit</label>' + inp('f:bu', '', 60) + '</div><div><label>Site / area</label>' + inp('f:site', '', 80) + '</div><div><label>Date</label>' + inp('f:date', 'dd/mm/yyyy', 20) + '</div><div><label>Work permit no.</label><input type="text" id="pno" value="' + h(d.permit || d.f.permitNo || '') + '" disabled title="Issued automatically">' + '</div></div></div>' +
       '<div class="card"><h2>Equipment and plant required</h2><p class="hint">List the tools, test instruments and plant needed for the job.</p><div class="grid2">' + [0, 1, 2, 3, 4, 5].map(function (i) { return inp('f:equip.' + i, i ? '' : 'e.g. multimeter', 40); }).join('') + '</div></div>' +
-      '<div class="card"><h2>Competence, qualification or training required</h2><p class="hint">“E&I Technician” is already printed on the form. Add anything else needed to do the work safely.</p><div class="grid2">' + [0, 1, 2, 3].map(function (i) { return inp('f:comp.' + i, '', 40); }).join('') + '</div></div>' +
-      '<div class="card"><h2>Legislation and procedures</h2><label>State / Territory WHS Act</label>' + inp('f:act', '', 60) + '<label>State / Territory WHS Regulation</label>' + inp('f:reg', '', 60) + '<label>Other legislation</label>' + inp('f:legOther', '', 90) +
+      '<div class="card"><h2>Competence, qualification or training required</h2><p class="hint">“E&I Technician” is already printed on the form. Add up to five more that are needed to do the work safely.</p><div class="grid2">' + [0, 1, 2, 3, 4].map(function (i) { return inp('f:comp.' + i, '', 40); }).join('') + '</div></div>' +
+      '<div class="card"><h2>Legislation and procedures</h2><label>State / Territory WHS Act <span style="font-weight:400">(tap all that apply)</span></label>' + multi('f:act', FORM.leg.act) + '<label>State / Territory WHS Regulation <span style="font-weight:400">(tap all that apply)</span></label>' + multi('f:reg', FORM.leg.reg) + '<label>Other legislation and standards <span style="font-weight:400">(if they apply)</span></label>' + multi('f:legOther', FORM.leg.legOther) +
       '<label>Relevant EIM procedures</label>' + [0, 1, 2].map(function (i) { return inp('f:proc.' + i, '', 50); }).join('<div style="height:6px"></div>') + '</div>';
   } else if (G.tab === 'checks') {
     html += '<div class="card"><h2>Additional PPE required</h2><p class="hint">Minimum PPE is compulsory: safety glasses, safety boots, long sleeve shirt (buttoned down) and long leg trousers. Tap any additional PPE this job needs.</p><div class="chips">' +
@@ -3520,7 +3601,7 @@ function crewRows(d, withRemove) {
   return d.members.map(function (m) {
     var sg = d.sigs[m.id];
     return '<div class="crew"><div class="n">' + h(m.name) + (m.id === d.preparerId ? '<span class="tag">Prepared by</span>' : '') + (m.id === d.reviewerId && d.status !== 'draft' ? '<span class="tag">Reviewer</span>' : '') + (m.id === G.me ? '<span class="tag">You</span>' : '') +
-      '<small>' + h(m.studentId || '') + (sg ? ' · signed ' + when(sg.at) : ' · not signed yet') + '</small></div>' + (sg ? '<div class="sig">' + sigSvg(sg.strokes) + '</div>' : '') +
+      '<small>' + (sg ? 'Signed ' + when(sg.at) : 'Not signed yet') + '</small></div>' + (sg ? '<div class="sig">' + sigSvg(sg.strokes) + '</div>' : '') +
       (withRemove && m.id !== d.preparerId && isPrep() ? '<button class="link red" data-act="remove" data-id="' + m.id + '">Remove</button>' : '') + '</div>';
   }).join('');
 }
@@ -3593,7 +3674,7 @@ function summaryHtml(d, forTrainer) {
   html += '<div class="card"><h2>' + (d.mode === 'crew' ? 'Crew sign on' : 'Sign on') + '</h2>' + crewRows(d, false) +
     (d.review ? '<div class="crew"><div class="n">' + h(d.review.name) + '<span class="tag">Reviewed</span><small>' + when(d.review.at) + ' · review no. ' + d.review.no + '</small></div><div class="sig">' + sigSvg(d.review.strokes) + '</div></div>' : '') +
     (d.approval ? '<div class="crew"><div class="n">' + h(d.approval.name) + '<span class="tag">Approved</span><small>' + when(d.approval.at) + '</small></div><div class="sig">' + sigSvg(d.approval.strokes) + '</div></div>' : '') + '</div>';
-  if (forTrainer) html += '<div class="card"><h2>Contact</h2>' + d.members.map(function (m) { return '<div class="hint">' + h(m.name) + ' · ' + h(m.studentId) + ' · ' + h(m.email) + '</div>'; }).join('') + '</div>';
+  if (forTrainer) html += '<div class="card"><h2>Contact</h2>' + d.members.map(function (m) { return '<div class="hint">' + h(m.name) + ' · ' + h(m.email) + '</div>'; }).join('') + '</div>';
   html += '<div class="card"><h2>History</h2><div class="hist">' + d.history.slice().reverse().map(function (x) { return '<div>' + when(x.at) + ' · <b>' + h(x.who) + '</b> ' + h(x.what) + '</div>'; }).join('') + '</div></div>';
   return html;
 }
@@ -3659,10 +3740,11 @@ document.addEventListener('click', function (e) {
   else if (a === 'matrix') matrix();
   else if (a === 'seg') { var k = b.parentNode.dataset.k; setVal(k, getVal(k) === b.dataset.v ? '' : b.dataset.v, true); patch(); drawTabs(); }
   else if (a === 'chip') { setVal(b.dataset.k, getVal(b.dataset.k) === 'Y' ? '' : 'Y', true); patch(); }
-  else if (a === 'fill') { var n = { permit: 7, have: 6, high: 8, haz: 23 }[id]; for (var i = 0; i < n; i++) if (!getVal('f:' + id + '.' + i)) setVal('f:' + id + '.' + i, b.dataset.v, true); patch(); drawTabs(); }
+  else if (a === 'fill') { var n = { permit: 7, have: 6, high: 8, haz: 23 }[id]; for (var i = id === 'permit' ? 1 : 0; i < n; i++) if (!getVal('f:' + id + '.' + i)) setVal('f:' + id + '.' + i, b.dataset.v, true); patch(); drawTabs(); }
   else if (a === 'resp') {
     var rk = b.parentNode.dataset.k, rv = b.dataset.v, cur = respList(getVal(rk)), at;
-    if (rv === 'All') cur = cur.length === 1 && cur[0] === 'All' ? [] : ['All'];
+    if (b.parentNode.classList.contains('multi')) { at = cur.indexOf(rv); if (at >= 0) cur.splice(at, 1); else cur.push(rv); }
+    else if (rv === 'All') cur = cur.length === 1 && cur[0] === 'All' ? [] : ['All'];
     else { cur = cur.filter(function (x) { return x !== 'All'; }); at = cur.indexOf(rv); if (at >= 0) cur.splice(at, 1); else cur.push(rv); }
     setVal(rk, cur.join(', '), true); patch(); drawTabs(); drawIssues();
   }
@@ -3728,13 +3810,52 @@ function trainerStart() {
   G.role = 'trainer'; G.tPoll = null;
   var saved = tStore();
   if (saved) { G.T = saved; G.tt = saved.tt; return tHome(); }
-  $app.innerHTML = '<div class="top"><div class="row"><div class="t"><b>EIM Training</b><span>Digital JSEA · trainer</span></div></div></div><div class="wrap"><div class="card"><h2>Trainer sign in</h2><label>Trainer</label><select id="tn"><option>Loading…</option></select><label>PIN</label><input type="password" id="tp" inputmode="numeric" autocomplete="off"><p></p><button class="btn block" data-act="tLogin">Sign in</button></div></div>';
+  $app.innerHTML = '<div class="top"><div class="row"><div class="t"><b>EIM Training</b><span>Digital JSEA · trainer</span></div></div></div><div class="wrap"><div class="card"><h2>Trainer sign in</h2><label>Trainer</label><select id="tn"><option>Loading…</option></select><label>PIN</label><input type="password" id="tp" inputmode="numeric" autocomplete="off"><p></p><button class="btn block" data-act="tLogin">Sign in</button></div><p class="center"><button class="link" data-act="tStudent">I am a student: enter a session code</button></p></div>';
   rpc('trainers').then(function (list) { document.getElementById('tn').innerHTML = list.map(function (n) { return '<option>' + h(n) + '</option>'; }).join(''); }, fail);
 }
 /* The site a trainer used last is remembered on this device, per trainer, so it does not have to be chosen every time. */
 function lastSiteOf(name) { try { var o = JSON.parse(store('jsea_site_' + name) || 'null'); if (o && o.area) return o; } catch (e) {} return { area: store('jsea_site') || '', code: '' }; }
 function saveLastSite(name, area, code) { store('jsea_site_' + name, JSON.stringify({ area: area, code: code || '' })); }
+/* ---- "Needs your action": JSEAs waiting for this trainer in any of their sessions, shown under the header on every
+   trainer screen. Firebase tells the page when anything changes, so no refresh is needed; the button is there anyway. */
+function tPendStart() {
+  if (!G.pendLive) {
+    G.pendLive = newLive(); var first = true;
+    G.pendLive.open('all', function () { if (first) { first = false; return; } clearTimeout(G.pendT); G.pendT = setTimeout(tPendLoad, 400); });
+    setInterval(function () { if (G.tt && !document.hidden) tPendLoad(); }, 90000);     // safety net if the live connection drops
+    setInterval(tPendDraw, 2000);
+  }
+  tPendLoad();
+}
+function tPendLoad(byHand) {
+  if (!G.tt) return;
+  rpc('pending', { tt: G.tt }).then(function (list) {
+    var seen = G.pendSeen || {}, fresh = list.filter(function (x) { return x.kind === 'approve' && seen[x.id] !== x.updated; });
+    var here = G.tSess && fresh.length && fresh.every(function (x) { return x.sessionId === G.tSess.id; });       // the session screen already announces its own
+    if (G.pendSeen && fresh.length && !here) alertUser(fresh.length === 1 ? (fresh[0].crewName || fresh[0].names.join(', ')) + ': JSEA waiting for approval' : fresh.length + ' JSEAs waiting for approval', '');
+    G.pendSeen = {}; list.forEach(function (x) { G.pendSeen[x.id] = x.updated; });
+    G.pend = list; tPendDraw();
+    if (byHand) toast(list.length ? list.length + ' waiting for you' : 'Nothing is waiting for you', 'good', 2500);
+  }, function () {});
+}
+function tPendDraw() {
+  var top = document.querySelector('.top'), old = document.getElementById('pend');
+  if (!G.tt || G.role !== 'trainer' || !top || !G.pend) { if (old) old.remove(); return; }
+  var n = G.pend.length, sig = n + '|' + !!G.pendOpen + '|' + G.pend.map(function (x) { return x.id + x.kind; }).join(',');
+  if (old && old.dataset.sig === sig && old.previousElementSibling === top) return;
+  if (old) old.remove();
+  var rows = G.pend.map(function (x) {
+    return '<button class="jrow" data-act="tPendOpen" data-id="' + x.id + '" data-sid="' + x.sessionId + '"><div class="n">' + h(x.crewName || x.names.join(', ')) +
+      '<small>' + h([x.unit + ' ' + x.assess, x.task, x.ref].filter(Boolean).join(' · ')) + '</small></div><span class="status ' + (x.kind === 'approve' ? 'approval' : 'returned') + '">' + (x.kind === 'approve' ? 'Approve' : 'Send PDF') + '</span></button>';
+  }).join('');
+  var e = el('<div id="pend" class="pend' + (n ? ' has' : '') + '"><div class="pendh"><button class="pendt" data-act="tPendToggle"' + (n ? '' : ' disabled') + '><em>' + n + '</em>' +
+    (n ? (n === 1 ? '1 JSEA needs' : n + ' JSEAs need') + ' your action' : 'Nothing is waiting for you') + (n ? '<span>' + (G.pendOpen ? '\u25B4' : '\u25BE') + '</span>' : '') + '</button>' +
+    '<button class="link" data-act="tPendRefresh">Refresh</button></div>' + (n && G.pendOpen ? '<div class="pendl">' + rows + '</div>' : '') + '</div>');
+  e.dataset.sig = sig;
+  top.parentNode.insertBefore(e, top.nextSibling);
+}
 function tHome() {
+  tPendStart();
   G.tPoll = null; G.tSess = null; if (G.TL) G.TL.close();
   var cat = G.T.catalogue.filter(function (c) { return c.unit !== 'GENERIC'; }), gen = G.T.catalogue.filter(function (c) { return c.unit === 'GENERIC'; })[0] || { steps: [] };
   /* Unit list = the UEE Unit Register, grouped by delivery block, plus any catalogue unit that is not in the register. */
@@ -3933,11 +4054,15 @@ function sendPdf() {
 function trainerClick(a, id, b) {
   var d = G.tDoc;
   if (a === 'tLogin') rpc('login', { name: document.getElementById('tn').value, pin: document.getElementById('tp').value }).then(function (r) { G.T = r; G.tt = r.tt; tStore(r); tHome(); }, fail);
-  else if (a === 'tLogout') { tStore(null); G.tt = null; G.T = null; trainerStart(); }
+  else if (a === 'tLogout') { tStore(null); G.tt = null; G.T = null; G.pend = null; G.pendSeen = null; tPendDraw(); trainerStart(); }
   else if (a === 'tHome') tHome();
   else if (a === 'tBackSession') tSession(G.tSess.id);
   else if (a === 'tOpenSession') tSession(id);
   else if (a === 'tOpenJsea') tJsea(id);
+  else if (a === 'tStudent') { G.role = 'code'; showCode(); }
+  else if (a === 'tPendToggle') { G.pendOpen = !G.pendOpen; tPendDraw(); }
+  else if (a === 'tPendRefresh') { tPendLoad(true); if (G.tPoll && G.tSess) G.tPoll(); else if (!G.tSess && !G.tDoc) tHome(); }
+  else if (a === 'tPendOpen') { var pid = b.dataset.id, psid = b.dataset.sid; G.pendOpen = false; if (!G.tSess || G.tSess.id !== psid) tSession(psid); tJsea(pid); }
   else if (a === 'matrix') matrix();
   else if (a === 'tCreate') {
     var v = function (i) { var e = document.getElementById(i); return e ? e.value.trim() : ''; }, E = G.tEntry, c = E.c;
