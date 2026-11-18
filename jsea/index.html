@@ -269,6 +269,13 @@ body.waiting .btn.block.wait{display:flex}
 }
 .bar .btn.ghost{flex:0 1 150px}
 .risk *,.chip *,.sstrip button *{pointer-events:none}
+
+.aicard{border-color:#c9d6f5}
+.aif{list-style:none;margin:6px 0;padding:0}
+.aif li{border-top:1px solid var(--line);padding:9px 0}.aif li:first-child{border-top:0}
+.aif label{display:flex;gap:10px;align-items:flex-start;font-weight:400;color:var(--ink);margin:0;font-size:14.5px}
+.aif input{width:22px;height:22px;flex:none;margin:1px 0 0}
+.spin.dark{display:inline-block;width:14px;height:14px;border-radius:50%;border:2px solid rgba(27,47,110,.25);border-top-color:var(--navy);animation:spin .7s linear infinite;vertical-align:-2px;margin-right:6px}
 </style>
 </head>
 <body>
@@ -2656,6 +2663,17 @@ function aiFresh(d) {
   d.steps.forEach(function (st) { st.hazards.forEach(function (hz) { if (hz.text && seen.indexOf(hsig(st, hz)) < 0) ok = false; }); });
   return ok;
 }
+/** A fingerprint of everything the trainer's wider AI check reads besides the step hazards: equipment, competence,
+ *  PPE, permits, high risk work, potential hazards, codes of practice and the step wording. */
+function gsig(d) {
+  var f = d.f || {}, s = Object.keys(f).sort().filter(function (k) { return /^(equip|comp|ppe|ppeOther|permit|high|haz|cop)\.|^(hazOther|copOther|taskName|taskDesc)$/.test(k) && f[k]; }).map(function (k) { return k + '=' + f[k]; }).join('|') +
+    '#' + d.steps.map(function (st) { return st.text + '>' + st.hazards.map(function (h) { return h.text; }).join(';'); }).join('|'), n = 5381;
+  s = s.toLowerCase();
+  for (var i = 0; i < s.length; i++) n = ((n << 5) + n + s.charCodeAt(i)) | 0;
+  return String(n);
+}
+/** True when the trainer's full AI check (steps plus the rest of the form) is up to date. */
+function aiFreshT(d) { return aiFresh(d) && !!d.ai && d.ai.gsig === gsig(d); }
 function blankHazard() { return { id: rid(), text: '', l: 0, s: 0, control: '', rl: 0, rs: 0 }; }
 
 /** Form fields a learner may fill in. Tick lists use index keys, e.g. ppe.3, haz.11 */
@@ -3947,11 +3965,11 @@ function confirm2(msg, okLabel) {
     m.querySelector('#cfy').focus();
   });
 }
-function askNote(title, hint) {
+function askNote(title, hint, prefill) {
   return new Promise(function (resolve) {
-    var m = modal('<h2>' + h(title) + '</h2><p class="hint">' + h(hint) + '</p><textarea id="note" rows="4" style="min-height:110px;overflow:auto" placeholder="Reason for returning the JSEA"></textarea><div class="acts"><button class="btn ghost" data-close>Cancel</button><button class="btn err" id="nok">Return JSEA</button></div>');
+    var m = modal('<h2>' + h(title) + '</h2><p class="hint">' + h(hint) + '</p><textarea id="note" rows="4" style="min-height:110px;overflow:auto" placeholder="Reason for returning the JSEA">' + h(prefill || '') + '</textarea><div class="acts"><button class="btn ghost" data-close>Cancel</button><button class="btn err" id="nok">Return JSEA</button></div>');
     m.querySelector('#nok').onclick = function () { var v = m.querySelector('#note').value.trim(); if (v.length < 5) return toast('Add a note so they know what to fix.', 'err'); m.remove(); resolve(v); };
-    m.querySelector('#note').focus();
+    var nt = m.querySelector('#note'); nt.focus(); if (prefill) { nt.style.minHeight = '190px'; nt.setSelectionRange(nt.value.length, nt.value.length); }
   });
 }
 
@@ -4132,12 +4150,43 @@ function tJsea(id, quiet) {
   if (!quiet) { $app.innerHTML = tTop('JSEA', '', 'tBackSession') + '<div class="wrap wide" id="main"><p class="center"><span class="spin"></span></p></div><div id="bar"></div>'; window.scrollTo(0, 0); }
   rpc('open', { tt: G.tt, id: id }).then(function (r) {
     G.tDoc = r.doc; drawJsea();
-    // AI check for the trainer: run quietly when a JSEA is waiting for approval and has not been checked as it stands now
-    if (r.doc.aiOn && r.doc.status === 'approval' && !aiFresh(r.doc) && G.aiTried !== r.doc.id + r.doc.rev) {
-      G.aiTried = r.doc.id + r.doc.rev;
-      rpc('aiReview', { tt: G.tt, id: id }, true).then(function (x) { if (G.tDoc && G.tDoc.id === x.doc.id) { G.tDoc = x.doc; drawJsea(); if (x.found) toast('AI check: ' + x.found + ' point' + (x.found > 1 ? 's' : '') + ' to look at', '', 5000); } }, function () {});
-    }
+    if (r.doc.aiOn && r.doc.status === 'approval' && !aiFreshT(r.doc) && G.aiTried !== r.doc.id + r.doc.rev) tAiRun();   // standard for every JSEA waiting for approval
   }, tFail);
+}
+/* ---- AI check for the trainer: the findings are a standard part of the review screen. Tick any to carry them into
+   the note when returning the JSEA. */
+function tAiRun() {
+  var d = G.tDoc; if (!d) return;
+  G.aiTried = d.id + d.rev; G.aiState = { id: d.id, run: true }; drawJsea();
+  rpc('aiReview', { tt: G.tt, id: d.id }, true).then(function (x) {
+    G.aiState = null;
+    if (G.tDoc && G.tDoc.id === x.doc.id) { G.tDoc = x.doc; drawJsea(); var n = tAiFindings(x.doc).length; toast(n ? 'AI check: ' + n + ' finding' + (n > 1 ? 's' : '') : 'AI check: nothing flagged', n ? '' : 'good', 4000); }
+  }, function (e) { G.aiState = { id: d.id, err: e.message || String(e) }; if (G.tDoc && G.tDoc.id === d.id) drawJsea(); });
+}
+function tAiFindings(d) {
+  var out = [];
+  if (!d.ai) return out;
+  (d.ai.items || []).forEach(function (it) { d.steps.forEach(function (st, n) { if (st.id === it.s) st.hazards.forEach(function (hz) {
+    if (hz.id === it.h && hsig(st, hz) === it.sig) out.push({ where: 'Step ' + (n + 1) + (it.k === 'control' ? ' control' : ' hazard'), msg: it.msg });
+  }); }); });
+  if (d.ai.gsig === gsig(d)) (d.ai.gen || []).forEach(function (g) { out.push({ where: g.label, msg: g.msg }); });
+  return out;
+}
+function tAiCard(d) {
+  if (!d.aiOn) return '';
+  var st = G.aiState && G.aiState.id === d.id ? G.aiState : null, can = d.status === 'approval', body;
+  if (st && st.run) body = '<p class="hint"><span class="spin dark"></span> Checking the hazards, controls, equipment, potential hazards, PPE, permits and competence…</p>';
+  else if (st && st.err) body = '<p class="hint" style="color:var(--err)">The AI check did not run: ' + h(st.err) + '</p><button class="btn small ghost" data-act="tAiRun">Try again</button>';
+  else if (!d.ai || !aiFreshT(d)) body = '<p class="hint">' + (d.ai ? 'The JSEA has changed since the last check.' : 'Not checked yet.') + '</p><button class="btn small ghost" data-act="tAiRun">Run the AI check</button>';
+  else {
+    var list = tAiFindings(d);
+    body = list.length ? '<ul class="aif">' + list.map(function (x, i) {
+      return '<li><label>' + (can ? '<input type="checkbox" class="aitick" data-i="' + i + '"' + (G.aiTicks && G.aiTicks[d.id + ':' + i] ? ' checked' : '') + '>' : '') + '<span><b>' + h(x.where) + ':</b> ' + h(x.msg) + '</span></label></li>';
+    }).join('') + '</ul>' + (can ? '<p class="hint">Tick the findings you agree with, then tap “Return with notes”. They are added to the note, where you can edit them before sending.</p>' : '')
+      : '<p class="hint">Nothing flagged in the hazards, controls, equipment, potential hazards, PPE, permits or competence.</p>';
+    body += '<p class="hint">Checked ' + when(d.ai.at) + '. A guide only: the decision is yours.</p>';
+  }
+  return '<div class="card aicard"><h2>AI check findings</h2>' + body + '</div>';
 }
 function drawJsea() {
   var d = G.tDoc, t = document.querySelector('.top .t'), head = '', bar = '';
@@ -4153,7 +4202,8 @@ function drawJsea() {
     bar = '<button class="btn ghost" data-act="tPdf">Preview PDF</button>';
   }
   if (d.returnNote && d.status === 'draft') head += '<div class="note ret"><b>Returned by ' + h(d.returnNote.role.toLowerCase() + ' ' + d.returnNote.by) + '</b>' + h(d.returnNote.note) + '</div>';
-  document.getElementById('main').innerHTML = head + summaryHtml(d, true);
+  document.getElementById('main').innerHTML = head + tAiCard(d) + summaryHtml(d, true);
+  document.querySelectorAll('.aitick').forEach(function (c) { c.onchange = function () { G.aiTicks = G.aiTicks || {}; G.aiTicks[d.id + ':' + c.dataset.i] = c.checked; }; });
   document.getElementById('bar').innerHTML = '<div class="bar">' + bar + '</div>';
 }
 
@@ -4280,7 +4330,9 @@ function trainerClick(a, id, b) {
       return rpc('decide', { tt: G.tt, id: d.id, rev: d.rev, decision: 'approve', strokes: st });
     }).then(function (r) { G.tDoc = r.doc; drawJsea(); return sendPdf(); }).catch(function (e) { finClose(false); G.tActing = false; tFail(e); tJsea(d.id, true); });
   }
-  else if (a === 'tReturn') askNote('Return to ' + (d.mode === 'crew' ? d.crewName : d.members[0].name), 'The students see this note at the top of their JSEA. Be specific about what to fix.').then(function (note) { return rpc('decide', { tt: G.tt, id: d.id, rev: d.rev, decision: 'return', note: note }); }).then(function (r) { toast('Returned to the student' + (d.members.length > 1 ? 's' : '') + '.', ''); tSession(G.tSess.id); }, function (e) { tFail(e); tJsea(d.id, true); });
+  else if (a === 'tAiRun') tAiRun();
+  else if (a === 'tReturn') askNote('Return to ' + (d.mode === 'crew' ? d.crewName : d.members[0].name), 'The students see this note at the top of their JSEA. Be specific about what to fix.',
+    tAiFindings(d).filter(function (x, i) { return G.aiTicks && G.aiTicks[d.id + ':' + i]; }).map(function (x) { return '• ' + x.where + ': ' + x.msg; }).join('\n')).then(function (note) { return rpc('decide', { tt: G.tt, id: d.id, rev: d.rev, decision: 'return', note: note }); }).then(function (r) { toast('Returned to the student' + (d.members.length > 1 ? 's' : '') + '.', ''); tSession(G.tSess.id); }, function (e) { tFail(e); tJsea(d.id, true); });
   else if (a === 'tPdf') { toast('Building the PDF…', '', 15000); makePdf(d).then(function (bytes) {
       var url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' })), l = document.createElement('a');
       l.href = url; l.download = (d.session.unit + '_' + d.session.assess + '_JSEA_' + (d.crewName || d.members[0].name) + (d.status === 'approved' ? '' : '_DRAFT') + '.pdf').replace(/\s+/g, '_'); document.body.appendChild(l); l.click(); l.remove(); G.lastPdfUrl = url; toast('PDF downloaded.', 'good');
