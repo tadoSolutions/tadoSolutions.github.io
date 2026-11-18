@@ -241,6 +241,12 @@ body.waiting .btn.block.wait{display:flex}
 .aibox .btn{width:100%}
 .aibox .hint{margin:8px 0 0}
 .seg button{min-width:44px}
+
+/* landing page: Trainer | Student */
+.wrap.narrow{max-width:520px}
+.ltabs{display:flex;background:#e3e8f2;border-radius:12px;padding:4px;margin:4px 0 14px}
+.ltabs button{flex:1;border:0;background:none;border-radius:9px;padding:12px 8px;font-size:16px;font-weight:700;color:var(--mute);min-height:48px}
+.ltabs button.on{background:#fff;color:var(--navy);box-shadow:0 1px 3px rgba(16,24,40,.18)}
 </style>
 </head>
 <body>
@@ -3411,12 +3417,19 @@ function start() {
     rpc('poll', { token: tok, rev: -1 }).then(function (r) { G.me = store('jsea_me_' + G.code); G.doc = r.doc; openDoc(); }, function () { store('jsea_tok_' + G.code, null); G.token = null; showJoin(); });
   } else showJoin();
 }
+/* Landing page: two tabs, Trainer and Student. A QR code skips this and goes straight to the student join screen. */
+function landTabs(on) {
+  return '<div class="ltabs" role="tablist"><button role="tab" id="tr" data-act="tTrainer" class="' + (on === 'trainer' ? 'on' : '') + '" aria-selected="' + (on === 'trainer') + '">Trainer</button>' +
+    '<button role="tab" id="st" data-act="tStudent" class="' + (on === 'student' ? 'on' : '') + '" aria-selected="' + (on === 'student') + '">Student</button></div>';
+}
 function showCode() {
-  $app.innerHTML = '<div class="top"><div class="row"><div class="t"><b>EIM Training</b><span>Digital JSEA</span></div></div></div><div class="wrap"><div class="card"><h2>Join a JSEA session</h2>' +
+  $app.innerHTML = '<div class="top"><div class="row"><div class="t"><b>EIM Training</b><span>Digital JSEA</span></div></div></div><div class="wrap narrow">' + landTabs('student') + '<div class="card"><h2>Join a JSEA session</h2>' +
     '<p class="hint">Scan the QR code on the projector, or type the 5 letter session code shown under it.</p><label>Session code</label><input type="text" id="code" maxlength="6" autocapitalize="characters" autocomplete="off" style="text-transform:uppercase;letter-spacing:4px;font-size:22px;text-align:center">' +
-    '<p></p><button class="btn block" id="go">Continue</button></div><p class="center"><button class="link" id="tr">Trainer sign in</button></p></div>';
+    '<p></p><button class="btn block" id="go">Continue</button></div></div>';
   document.getElementById('go').onclick = function () { G.code = document.getElementById('code').value.trim().toUpperCase(); if (G.code) start(); };
-  document.getElementById('tr').onclick = function () { G.role = 'trainer'; trainerStart(); };
+  document.getElementById('tr').onclick = function (e) { e.stopPropagation(); G.role = 'trainer'; trainerStart(); };
+  document.getElementById('st').onclick = function (e) { e.stopPropagation(); };
+  document.getElementById('code').onkeydown = function (e) { if (e.key === 'Enter') document.getElementById('go').click(); };
   document.getElementById('code').focus();
 }
 function showJoin() {
@@ -3850,7 +3863,7 @@ function trainerStart() {
   G.role = 'trainer'; G.tPoll = null;
   var saved = tStore();
   if (saved) { G.T = saved; G.tt = saved.tt; return tHome(); }
-  $app.innerHTML = '<div class="top"><div class="row"><div class="t"><b>EIM Training</b><span>Digital JSEA · trainer</span></div></div></div><div class="wrap"><div class="card"><h2>Trainer sign in</h2><label>Trainer</label><select id="tn"><option>Loading…</option></select><label>PIN</label><input type="password" id="tp" inputmode="numeric" autocomplete="off"><p></p><button class="btn block" data-act="tLogin">Sign in</button></div><p class="center"><button class="link" data-act="tStudent">I am a student: enter a session code</button></p></div>';
+  $app.innerHTML = '<div class="top"><div class="row"><div class="t"><b>EIM Training</b><span>Digital JSEA</span></div></div></div><div class="wrap narrow">' + landTabs('trainer') + '<div class="card"><h2>Trainer sign in</h2><label>Trainer</label><select id="tn"><option>Loading…</option></select><label>PIN</label><input type="password" id="tp" inputmode="numeric" autocomplete="off"><p></p><button class="btn block" data-act="tLogin">Sign in</button></div></div>';
   rpc('trainers').then(function (list) { document.getElementById('tn').innerHTML = list.map(function (n) { return '<option>' + h(n) + '</option>'; }).join(''); }, fail);
 }
 /* The site a trainer used last is remembered on this device, per trainer, so it does not have to be chosen every time. */
@@ -4107,6 +4120,7 @@ function trainerClick(a, id, b) {
   else if (a === 'tOpenSession') tSession(id);
   else if (a === 'tOpenJsea') tJsea(id);
   else if (a === 'tStudent') { G.role = 'code'; showCode(); }
+  else if (a === 'tTrainer') { G.role = 'trainer'; trainerStart(); }
   else if (a === 'tPendToggle') { G.pendOpen = !G.pendOpen; tPendDraw(); }
   else if (a === 'tPendRefresh') { tPendLoad(true); if (G.tPoll && G.tSess) G.tPoll(); else if (!G.tSess && !G.tDoc) tHome(); }
   else if (a === 'tPendOpen') { var pid = b.dataset.id, psid = b.dataset.sid; G.pendOpen = false; if (!G.tSess || G.tSess.id !== psid) tSession(psid); tJsea(pid); }
