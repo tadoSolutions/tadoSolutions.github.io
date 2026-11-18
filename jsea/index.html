@@ -180,19 +180,14 @@ label,.lab,.hint,.who,.q .txt small,.jrow .n small,.crew .n small,.hist{font-siz
   #main[data-tab=hazards]>.card>:not(.q){grid-column:1/-1}
   #main[data-tab=hazards]>.card>.q:last-of-type,#main[data-tab=hazards]>.card>.q:nth-last-of-type(2){border-bottom:0}
   /* Job steps: the step on the left, its hazards laid out like the form's table on the right */
-  #main[data-tab=steps] .step{display:grid;grid-template-columns:300px 1fr}
-  #main[data-tab=steps] .step-h{border-right:1px solid var(--line)}
   #main[data-tab=steps] .step-b{padding:8px 16px 14px}
-  #main[data-tab=steps] .haz{display:grid;grid-template-columns:1fr 150px 1.25fr 150px;gap:2px 12px;align-items:start}
+  #main[data-tab=steps] .haz{display:grid;grid-template-columns:1fr 1.25fr 190px;gap:2px 12px;align-items:start}
   #main[data-tab=steps] .haz>:nth-child(1){grid-area:1/1}#main[data-tab=steps] .haz>:nth-child(2){grid-area:2/1}
-  #main[data-tab=steps] .haz>:nth-child(3){grid-area:2/2}
-  #main[data-tab=steps] .haz>:nth-child(4){grid-area:1/3}#main[data-tab=steps] .haz>:nth-child(5){grid-area:2/3}
-  #main[data-tab=steps] .haz>:nth-child(6){grid-area:2/4}
-  #main[data-tab=steps] .haz>:nth-child(7){grid-area:3/1/3/-1;justify-self:start}
-  #main[data-tab=steps] .haz .rr{margin-top:0}
+  #main[data-tab=steps] .haz>:nth-child(3){grid-area:1/2}#main[data-tab=steps] .haz>:nth-child(4){grid-area:2/2}
+  #main[data-tab=steps] .haz>:nth-child(5){grid-area:2/3;grid-template-columns:1fr;gap:6px;margin-top:0}
+  #main[data-tab=steps] .haz>:nth-child(6){grid-area:3/1/3/-1;justify-self:start}
+  #main[data-tab=steps] .haz .arr{display:none}
   #main[data-tab=steps] .haz label{margin-top:4px}
-  #main[data-tab=steps] .haz .risk{flex-direction:column;align-items:stretch;gap:4px;text-align:center}
-  #main[data-tab=steps] .haz .risk b{align-self:center}
   .bar{padding-left:24px;padding-right:24px}.bar .btn{max-width:300px}
   table.sum{font-size:14.5px}table.sum th{font-size:13px}
 }
@@ -247,6 +242,33 @@ body.waiting .btn.block.wait{display:flex}
 .ltabs{display:flex;background:#e3e8f2;border-radius:12px;padding:4px;margin:4px 0 14px}
 .ltabs button{flex:1;border:0;background:none;border-radius:9px;padding:12px 8px;font-size:16px;font-weight:700;color:var(--mute);min-height:48px}
 .ltabs button.on{background:#fff;color:var(--navy);box-shadow:0 1px 3px rgba(16,24,40,.18)}
+
+/* ---- job steps: one card per step, compact risk row ---- */
+.step-h{align-items:center;padding:6px 6px 6px 10px}
+.step-h .num{margin-top:0}
+.step-h .of{flex:1;font-weight:700;color:var(--navy);font-size:14px}
+.step-b>label:first-child{margin-top:8px}
+.step-b>textarea:first-of-type{font-weight:600}
+.rr{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:6px;margin-top:8px}
+.rr .arr{color:var(--mute);font-size:18px}
+.risk{padding:5px 6px 5px 10px;min-height:44px;font-size:12.5px;line-height:1.2;color:var(--ink);font-weight:600}
+.risk small{display:block;font-weight:400;color:var(--mute);font-size:11px}
+.risk b{font-size:16px;min-width:40px;padding:5px 6px}
+.risk.unset{border-style:dashed}.risk.unset b{font-size:13px;color:var(--blue);background:#eef3ff}
+.addstep{margin:14px 0 0}
+.sstrip{display:flex;gap:6px;overflow-x:auto;padding:8px 2px;position:sticky;top:calc(var(--toph,50px) + var(--tabh,42px));z-index:17;background:var(--bg);scrollbar-width:none}
+.sstrip::-webkit-scrollbar{display:none}
+.sstrip button{flex:none;min-width:36px;height:36px;border-radius:18px;border:1.5px solid #b9c2d6;background:#fff;font-weight:700;font-size:14px;color:var(--ink);padding:0 6px}
+.sstrip button.ok{border-color:#8fd0a8;background:#eefaf2;color:#17683a}
+.sstrip button.bad{border-color:#e9a3a3}
+.sstrip button.on{background:var(--navy);border-color:var(--navy);color:#fff;box-shadow:0 0 0 3px rgba(27,47,110,.18)}
+@media (max-width:959px){
+  .pager{display:flex;align-items:flex-start;gap:12px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;overscroll-behavior-x:contain;scrollbar-width:none;transition:height .15s}
+  .pager::-webkit-scrollbar{display:none}
+  .pager>.step{flex:0 0 100%;scroll-snap-align:start;scroll-snap-stop:always;margin:0}
+}
+.bar .btn.ghost{flex:0 1 150px}
+.risk *,.chip *,.sstrip button *{pointer-events:none}
 </style>
 </head>
 <body>
@@ -3163,7 +3185,7 @@ function rpc(action, payload, quiet) {
   });
 }
 /* The header's real height, so the bars that stick under it (tabs, trainer strip) sit exactly below it. */
-function setTopHeight() { var t = document.querySelector('.top'); if (t && t.offsetHeight) document.documentElement.style.setProperty('--toph', t.offsetHeight + 'px'); }
+function setTopHeight() { var t = document.querySelector('.top'); if (t && t.offsetHeight) document.documentElement.style.setProperty('--toph', t.offsetHeight + 'px'); var b = document.getElementById('tabs'); if (b && b.offsetHeight) document.documentElement.style.setProperty('--tabh', b.offsetHeight + 'px'); }
 window.addEventListener('resize', setTopHeight); setInterval(setTopHeight, 1500);
 /* Full screen on phones: Android browsers allow it after the first tap. iPhones do not allow a web page to hide the
    address bar; there it hides itself on scrolling, or the page can be added to the home screen. Asked once per visit. */
@@ -3214,14 +3236,24 @@ function toast(msg, kind, ms) {
 }
 function fail(e) { toast(e.message || String(e), 'err', 6000); }
 var _audio;
+/* Notification tune. Browsers only allow sound after the person has touched the page, so the audio is unlocked on the
+   first tap. It plays while the page is open, including in a background tab; it cannot play once the phone is locked. */
+function soundOn() { return store('jsea_sound') !== 'off'; }
+function audioCtx() { try { _audio = _audio || new (window.AudioContext || window.webkitAudioContext)(); if (_audio.state === 'suspended') _audio.resume(); return _audio; } catch (e) { return null; } }
+document.addEventListener('pointerdown', audioCtx, { once: true, capture: true });
+function chime() {
+  var a = audioCtx(); if (!a) return;
+  [[659.25, 0], [880, 0.16], [1318.5, 0.32]].forEach(function (n) {            // E5, A5, E6
+    var o = a.createOscillator(), g = a.createGain(), t = a.currentTime + n[1];
+    o.type = 'sine'; o.frequency.value = n[0]; o.connect(g); g.connect(a.destination);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.28, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
+    o.start(t); o.stop(t + 0.65);
+  });
+}
 function alertUser(msg, kind) {
   toast(msg, kind, 8000);
   try { if (navigator.vibrate) navigator.vibrate([120, 60, 120]); } catch (e) {}
-  try {
-    _audio = _audio || new (window.AudioContext || window.webkitAudioContext)();
-    var o = _audio.createOscillator(), g = _audio.createGain(); o.connect(g); g.connect(_audio.destination);
-    o.frequency.value = 880; g.gain.value = 0.08; o.start(); o.stop(_audio.currentTime + 0.18);
-  } catch (e) {}
+  if (soundOn()) try { chime(); } catch (e) {}
   var base = document.title.replace(/^\(●\) /, ''); document.title = '(●) ' + base;
   setTimeout(function () { document.title = base; }, 15000);
 }
@@ -3546,9 +3578,12 @@ function patch() {
 }
 function drawRisk(e) {
   var p = e.dataset.k.split(':'), res = p[3] === 'r', l = getVal('h:' + p[1] + ':' + p[2] + ':' + (res ? 'rl' : 'l')), s = getVal('h:' + p[1] + ':' + p[2] + ':' + (res ? 'rs' : 's')), n = l * s, b = FORM.band(n);
-  e.innerHTML = '<span>' + (res ? 'Residual risk' : 'Risk rating') + (n ? '<br>' + FORM.lik[l - 1] + ' × ' + FORM.sev[s - 1] : '<br>Tap to set') + '</span><b class="' + (n ? 'r-' + b.k : '') + '">' + (n || '–') + '</b>';
+  e.classList.toggle('unset', !n);
+  e.title = n ? FORM.lik[l - 1] + ' × ' + FORM.sev[s - 1] : '';
+  var html = '<span>' + (res ? 'Residual risk<small>after controls</small>' : 'Risk rating<small>before controls</small>') + '</span><b class="' + (n ? 'r-' + b.k : '') + '">' + (n || 'Set') + '</b>';
+  if (e.dataset.h !== html) { e.dataset.h = html; e.innerHTML = html; }     // only when it changes: replacing the contents mid-tap would swallow the tap
 }
-var TABS = [['details', 'Details'], ['checks', 'PPE'], ['hazards', 'Hazards'], ['steps', 'Steps'], ['sign', 'Sign']];
+var TABS = [['details', 'Details'], ['checks', 'Checks'], ['hazards', 'Hazards'], ['steps', 'Steps'], ['sign', 'Sign']];
 function errCount(sec) { return G.doc.issues.filter(function (i) { return i.level === 'error' && (i.sec === sec || (sec === 'sign' && i.sec === 'amend')); }).length; }
 function drawTabs() {
   var t = document.getElementById('tabs'); if (!t) return;
@@ -3609,31 +3644,93 @@ function drawMain0() {
       FORM.haz.map(function (t, i) { var k = 'f:haz.' + i; return '<div class="q' + (getVal(k) || i === 23 ? '' : ' miss') + '"><div class="txt"><b>' + h(t[0]) + '</b><small>' + h(t[1]) + '</small></div>' + seg(k, ['Y', '✓'], ['NP', 'NP']) + '</div>'; }).join('') +
       '<label>Other hazard (describe)</label>' + inp('f:hazOther', '', 80) + '<button class="link" data-act="fill" data-id="haz" data-v="NP">Mark unanswered as NP</button></div>';
   } else if (G.tab === 'steps') {
-    html += '<p class="hint">The job steps are a starting point – edit, add, insert or delete steps so they match how you will actually do the job. For every step, identify the hazards, rate the risk, add controls and rate the residual risk.</p>';
+    html += '<p class="hint">Edit, add or delete steps so they match how you will do the job. For every step: the hazards, the controls, and the risk before and after the controls. <button class="link" data-act="matrix">Risk matrix</button></p>';
+    html += '<div class="sstrip" id="sstrip"></div><div class="pager" id="pager">';
     d.steps.forEach(function (st, n) {
       var bad = d.issues.some(function (i) { return i.id === st.id && i.level === 'error'; });
-      html += '<div class="step' + (bad ? ' bad' : '') + '" id="st_' + st.id + '"><div class="step-h"><span class="num">' + (n + 1) + '</span>' + area('s:' + st.id + ':text', 'Describe the job step', 2) + '<button class="icon" data-act="stepMenu" data-id="' + st.id + '" aria-label="Step options">⋮</button></div><div class="step-b">' +
+      html += '<div class="step' + (bad ? ' bad' : '') + '" id="st_' + st.id + '"><div class="step-h"><span class="num">' + (n + 1) + '</span><span class="of">Step ' + (n + 1) + ' of ' + d.steps.length + '</span><button class="icon" data-act="stepMenu" data-id="' + st.id + '" aria-label="Step options">⋮</button></div><div class="step-b">' +
+        '<label>Job step</label>' + area('s:' + st.id + ':text', 'Describe the job step', 2) +
         st.hazards.map(function (hz, j) {
           var b = 'h:' + st.id + ':' + hz.id + ':';
-          return '<div class="haz"><label>Hazard' + (st.hazards.length > 1 ? ' ' + (j + 1) : '') + '</label>' + area(b + 'text', 'What could cause harm at this step?', 1) +
-            '<div class="rr"><button class="risk" data-act="risk" data-k="r:' + st.id + ':' + hz.id + ':i"></button></div><label>Control measures (one per line)</label>' + area(b + 'control', 'How will you eliminate or reduce the risk?', 2) +
-            '<div class="rr"><button class="risk" data-act="risk" data-k="r:' + st.id + ':' + hz.id + ':r"></button></div>' + (st.hazards.length > 1 ? '<button class="link red" data-act="hazDel" data-id="' + st.id + ':' + hz.id + '">Remove this hazard</button>' : '') + '</div>';
+          return '<div class="haz"><label>Hazard' + (st.hazards.length > 1 ? ' ' + (j + 1) : '') + '</label>' + area(b + 'text', 'What could cause harm at this step?', 2) +
+            '<label>Control measures (one per line)</label>' + area(b + 'control', 'How will you eliminate or reduce the risk?', 3) +
+            '<div class="rr"><button class="risk" data-act="risk" data-k="r:' + st.id + ':' + hz.id + ':i"></button><span class="arr">→</span><button class="risk" data-act="risk" data-k="r:' + st.id + ':' + hz.id + ':r"></button></div>' +
+            (st.hazards.length > 1 ? '<button class="link red" data-act="hazDel" data-id="' + st.id + ':' + hz.id + '">Remove this hazard</button>' : '') + '</div>';
         }).join('') + '<button class="link" data-act="hazAdd" data-id="' + st.id + '">+ Add another hazard to this step</button>' +
-        '<label>Responsible person <span style="font-weight:400">(tap one or more)</span></label><div class="chips resp" data-k="s:' + st.id + ':resp">' +
-        respOptions(st.resp).map(function (nm) { return respChip(nm, respList(st.resp).indexOf(nm) >= 0); }).join('') + '</div></div></div>' +
-        '<button class="addstep" data-act="stepAdd" data-id="' + st.id + '">+ Insert a step here</button>';
+        '<label>Responsible person <span style="font-weight:400">(tap to change)</span></label><div class="chips resp" data-k="s:' + st.id + ':resp">' +
+        respOptions(st.resp).map(function (nm) { return respChip(nm, respList(st.resp).indexOf(nm) >= 0); }).join('') + '</div>' +
+        '<button class="addstep" data-act="stepAdd" data-id="' + st.id + '">+ Add a step after this one</button></div></div>';
     });
+    html += '</div>';
   } else {
     html += signTab();
   }
   m.setAttribute('data-tab', G.tab);                   // lets the wide-screen layout differ per tab
   m.innerHTML = html;
   m.querySelectorAll('.risk').forEach(drawRisk);
-  var i = TABS.map(function (x) { return x[0]; }).indexOf(G.tab);
-  bar.innerHTML = '<div class="bar"><button class="btn ghost" data-act="matrix">Risk matrix</button>' + (i < 4 ? '<button class="btn" data-act="tab" data-id="' + TABS[i + 1][0] + '">Next: ' + TABS[i + 1][1] + '</button>' : '') + '</div>';
+  pagerInit(); drawBar();
   showPin();
 }
-function drawIssues() { var e = document.getElementById('issues'); if (e) e.innerHTML = issueList(G.doc.issues.filter(function (i) { return i.sec !== 'sign'; })); var aw = document.getElementById('aiw'), ah = aiCard(G.doc); if (aw && aw.dataset.h !== ah) { aw.dataset.h = ah; aw.innerHTML = ah; } document.querySelectorAll('.step').forEach(function (s) { var id = s.id.slice(3); s.classList.toggle('bad', G.doc.issues.some(function (i) { return i.id === id && i.level === 'error'; })); }); var sb = document.getElementById('submit'); if (sb) sb.disabled = !canSubmit(); var lk = document.getElementById('lockbtn'); if (lk) lk.disabled = !contentDone(); }
+/* ---- Steps: on a phone or tablet each job step is a card and the cards sit side by side. Swipe, tap a number in the
+   strip, or use Back / Next. On a wide screen the steps stay in one list and the strip jumps to a step. */
+function pagerOn() { var p = document.getElementById('pager'); return !!p && getComputedStyle(p).display === 'flex'; }
+function stepIx() { var ids = G.doc.steps.map(function (s) { return s.id; }), i = ids.indexOf(G.stepId); return i < 0 ? 0 : i; }
+function fitPager() {
+  var p = document.getElementById('pager'); if (!p) return;
+  if (!pagerOn()) { p.style.height = ''; return; }
+  var c = p.children[stepIx()]; if (c) p.style.height = c.offsetHeight + 'px';
+}
+function showStep(i, smooth) {
+  var p = document.getElementById('pager'), n = G.doc.steps.length; if (!p || !n) return;
+  i = Math.max(0, Math.min(n - 1, i)); G.stepId = G.doc.steps[i].id;
+  var c = p.children[i];
+  if (pagerOn()) { p.scrollTo({ left: c.offsetLeft - p.offsetLeft, behavior: smooth ? 'smooth' : 'auto' }); fitPager(); if (smooth) window.scrollTo({ top: 0, behavior: 'smooth' }); }
+  else if (smooth) c.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  drawStrip(); drawBar();
+}
+function drawStrip() {
+  var s = document.getElementById('sstrip'); if (!s) return;
+  var cur = stepIx(), html = G.doc.steps.map(function (st, n) {
+    var bad = G.doc.issues.some(function (i) { return i.id === st.id && i.level === 'error'; });
+    return '<button data-act="stepGo" data-id="' + n + '" class="' + (bad ? 'bad' : 'ok') + (n === cur ? ' on' : '') + '" aria-label="Step ' + (n + 1) + (bad ? ', not finished' : ', finished') + '">' + (n + 1) + '</button>';
+  }).join('');
+  if (s.dataset.h !== html) { s.dataset.h = html; s.innerHTML = html; var on = s.querySelector('.on'); if (on && on.scrollIntoView) s.scrollTo({ left: on.offsetLeft - s.clientWidth / 2 + on.offsetWidth / 2, behavior: 'smooth' }); }
+}
+function pagerInit() {
+  var p = document.getElementById('pager'); if (!p) return;
+  if (G.stepGo) { G.stepId = G.stepGo; }
+  if (G.stepGo && G.doc.steps.some(function (s) { return s.id === G.stepGo; })) G.stepGo = null;
+  drawStrip();
+  var c = p.children[stepIx()];
+  if (pagerOn() && c) { p.style.scrollBehavior = 'auto'; p.scrollLeft = c.offsetLeft - p.offsetLeft; }
+  setTimeout(fitPager, 0);
+  var t = null;
+  p.addEventListener('scroll', function () {
+    clearTimeout(t); t = setTimeout(function () {
+      if (!pagerOn() || !p.clientWidth) return;
+      var i = Math.round(p.scrollLeft / p.clientWidth), st = G.doc.steps[i];
+      if (st && st.id !== G.stepId) { G.stepId = st.id; drawStrip(); drawBar(); }
+      fitPager();
+    }, 90);
+  }, { passive: true });
+  p.addEventListener('input', function () { setTimeout(fitPager, 0); });
+}
+window.addEventListener('resize', function () { if (document.getElementById('pager')) { showStep(stepIx()); } });
+function drawBar() {
+  var bar = document.getElementById('bar'); if (!bar || !editable()) return;
+  var i = TABS.map(function (x) { return x[0]; }).indexOf(G.tab), back = '', next = '';
+  if (G.tab === 'steps' && pagerOn()) {
+    var n = stepIx(), last = G.doc.steps.length - 1;
+    back = n > 0 ? '<button class="btn ghost" data-act="stepGo" data-id="' + (n - 1) + '">‹ Step ' + n + '</button>' : '<button class="btn ghost" data-act="tab" data-id="hazards">‹ Hazards</button>';
+    next = n < last ? '<button class="btn" data-act="stepGo" data-id="' + (n + 1) + '">Step ' + (n + 2) + ' ›</button>' : '<button class="btn" data-act="tab" data-id="sign">Next: Sign</button>';
+  } else {
+    if (i > 0) back = '<button class="btn ghost" data-act="tab" data-id="' + TABS[i - 1][0] + '">‹ ' + TABS[i - 1][1] + '</button>';
+    if (i < 4) next = '<button class="btn" data-act="tab" data-id="' + TABS[i + 1][0] + '">Next: ' + TABS[i + 1][1] + '</button>';
+  }
+  var html = '<div class="bar">' + back + next + '</div>';
+  if (bar.dataset.h !== html) { bar.dataset.h = html; bar.innerHTML = html; }
+}
+function drawIssues() { var e = document.getElementById('issues'); if (e) e.innerHTML = issueList(G.doc.issues.filter(function (i) { return i.sec !== 'sign'; })); var aw = document.getElementById('aiw'), ah = aiCard(G.doc); if (aw && aw.dataset.h !== ah) { aw.dataset.h = ah; aw.innerHTML = ah; } document.querySelectorAll('.step').forEach(function (s) { var id = s.id.slice(3); s.classList.toggle('bad', G.doc.issues.some(function (i) { return i.id === id && i.level === 'error'; })); }); drawStrip(); fitPager(); var sb = document.getElementById('submit'); if (sb) sb.disabled = !canSubmit(); var lk = document.getElementById('lockbtn'); if (lk) lk.disabled = !contentDone(); }
 function issueList(list) {
   if (!list.length) return '<div class="note good"><b>Nothing outstanding</b>Every section is complete.</div>';
   return '<ul class="issues">' + list.map(function (i) { return '<li class="' + (i.level === 'warn' ? 'warn' : '') + '" data-act="goto" data-id="' + i.sec + ':' + i.id + '">' + h(i.msg) + '</li>'; }).join('') + '</ul>';
@@ -3766,7 +3863,8 @@ function addStep(refId, before) {
   else if (before) o = i > 0 ? (st[i - 1].o + st[i].o) / 2 : st[i].o - 1;
   else o = i < st.length - 1 ? (st[i].o + st[i + 1].o) / 2 : st[i].o + 1;
   hz[rid()] = newHazard(1);
-  tracked(G.L.set('draft/steps/' + rid(), { o: o, text: '', resp: '', hz: hz }));
+  var nid = rid(); G.stepGo = nid;
+  tracked(G.L.set('draft/steps/' + nid, { o: o, text: '', resp: G.doc.mode === 'crew' ? 'All' : respName(G.me || G.doc.members[0]), hz: hz }));
 }
 function moveStep(id, dir) {
   var st = liveSteps(), i = st.map(function (x) { return x.id; }).indexOf(id), j = i + dir, u = {};
@@ -3808,6 +3906,7 @@ document.addEventListener('click', function (e) {
   else if (a === 'hazAdd') addHazard(id);
   else if (a === 'hazDel') { confirm2('Remove this hazard and its controls?', 'Remove').then(function () { tracked(G.L.remove('draft/steps/' + id.split(':')[0] + '/hz/' + id.split(':')[1])); }); }
   else if (a === 'stepAdd') addStep(id, false);
+  else if (a === 'stepGo') showStep(+id, true);
   else if (a === 'stepMenu') {
     var m = modal('<h2>Step ' + (d.steps.map(function (s) { return s.id; }).indexOf(id) + 1) + '</h2><div class="menu"><button data-o="above">Insert a step above</button><button data-o="below">Insert a step below</button><button data-o="up">Move up</button><button data-o="down">Move down</button><button class="red" data-o="del">Delete this step</button><button data-close>Cancel</button></div>');
     m.querySelectorAll('[data-o]').forEach(function (o) { o.onclick = function () {
@@ -3817,7 +3916,7 @@ document.addEventListener('click', function (e) {
       else if (d.steps.length < 2) toast('A JSEA needs at least one step.', 'err'); else confirm2('Delete this step and its hazards?', 'Delete step').then(function () { tracked(G.L.remove('draft/steps/' + id)); });
     }; });
   }
-  else if (a === 'goto') { var s = id.split(':'); G.tab = s[0] === 'amend' ? 'sign' : s[0]; refresh(); if (s[1]) { var n3 = document.getElementById('st_' + s[1]); if (n3) n3.scrollIntoView({ behavior: 'smooth', block: 'start' }); } else window.scrollTo(0, 0); }
+  else if (a === 'goto') { var s = id.split(':'); G.tab = s[0] === 'amend' ? 'sign' : s[0]; refresh(); if (s[1]) { G.stepId = s[1]; G.sig = null; refresh(); showStep(stepIx(), !pagerOn()); if (pagerOn()) window.scrollTo(0, 0); } else window.scrollTo(0, 0); }
   else if (a === 'sign') settle().then(function () { return askSignature('Sign on', 'I have read and understood this JSEA and will follow its controls.'); }).then(function (st) { return act('sign', { strokes: st }); }).then(function () { window.scrollTo(0, 0); toast('Signed on.', 'good'); }, fail);
   else if (a === 'pickRev') { G.pickRev = id; G.sig = null; refresh(); }
   else if (a === 'remove') { confirm2('Remove this person from the crew?', 'Remove').then(function () { act('removeMember', { memberId: id }).catch(fail); }); }
@@ -3894,7 +3993,7 @@ function tPendLoad(byHand) {
 function tPendDraw() {
   var top = document.querySelector('.top'), old = document.getElementById('pend');
   if (!G.tt || G.role !== 'trainer' || !top || !G.pend) { if (old) old.remove(); return; }
-  var n = G.pend.length, sig = n + '|' + !!G.pendOpen + '|' + G.pend.map(function (x) { return x.id + x.kind; }).join(',');
+  var n = G.pend.length, sig = n + '|' + !!G.pendOpen + '|' + soundOn() + '|' + G.pend.map(function (x) { return x.id + x.kind; }).join(',');
   if (old && old.dataset.sig === sig && old.previousElementSibling === top) return;
   if (old) old.remove();
   var rows = G.pend.map(function (x) {
@@ -3903,7 +4002,7 @@ function tPendDraw() {
   }).join('');
   var e = el('<div id="pend" class="pend' + (n ? ' has' : '') + '"><div class="pendh"><button class="pendt" data-act="tPendToggle"' + (n ? '' : ' disabled') + '><em>' + n + '</em>' +
     (n ? (n === 1 ? '1 JSEA needs' : n + ' JSEAs need') + ' your action' : 'Nothing is waiting for you') + (n ? '<span>' + (G.pendOpen ? '\u25B4' : '\u25BE') + '</span>' : '') + '</button>' +
-    '<button class="link" data-act="tPendRefresh">Refresh</button></div>' + (n && G.pendOpen ? '<div class="pendl">' + rows + '</div>' : '') + '</div>');
+    '<button class="link" data-act="tSound" title="Play a tune when a JSEA needs approval">' + (soundOn() ? 'Sound on' : 'Sound off') + '</button><button class="link" data-act="tPendRefresh">Refresh</button></div>' + (n && G.pendOpen ? '<div class="pendl">' + rows + '</div>' : '') + '</div>');
   e.dataset.sig = sig;
   top.parentNode.insertBefore(e, top.nextSibling);
 }
@@ -3930,8 +4029,7 @@ function tHome() {
     '<label>Assessment / task</label><select id="st"></select><div id="sx"></div>' +
     '<label>Site / area</label><select id="ss">' + (G.T.sites || []).map(function (x) { return '<option' + (x.name === lastSite ? ' selected' : '') + '>' + h(x.name) + '</option>'; }).join('') + '<option value=""' + (lastSite && !lastKnown ? ' selected' : '') + '>Other (type it)</option></select><div id="xso"></div><p class="hint" id="pmt"></p>' +
     '<label>Date on the JSEA</label><input type="text" id="sd" value="' + today + '">' +
-    '<label>Who prepares the JSEA?</label><select id="sm"><option value="both">Students choose: individual or work crew</option><option value="individual">Individual only</option><option value="crew">Work crews only</option></select>' +
-    '<label style="display:flex;gap:8px;align-items:center;font-weight:400;color:var(--ink)"><input type="checkbox" id="se" style="width:20px;height:20px"> Also email me when a JSEA is waiting for approval</label>' +
+    '<label>Who prepares the JSEA?</label><select id="sm"><option value="crew">Work crews</option><option value="individual">Individual</option><option value="both">Students choose: work crew or individual</option></select>' +
     '<p></p><button class="btn block" data-act="tCreate">Create QR code</button><p class="hint">Emails left today: ' + (G.T.quota < 0 ? 'unknown' : G.T.quota) + ' · <a href="' + h(G.T.sheetUrl) + '" target="_blank" rel="noopener">Open settings sheet (catalogue, units, trainers, records)</a></p></div></div>' +
     '<div><div class="card"><h2>Sessions</h2><div id="sl"><span class="spin"></span></div></div></div></div></div>';
   var su = document.getElementById('su'), st = document.getElementById('st'), ss = document.getElementById('ss');
@@ -4121,6 +4219,7 @@ function trainerClick(a, id, b) {
   else if (a === 'tOpenJsea') tJsea(id);
   else if (a === 'tStudent') { G.role = 'code'; showCode(); }
   else if (a === 'tTrainer') { G.role = 'trainer'; trainerStart(); }
+  else if (a === 'tSound') { store('jsea_sound', soundOn() ? 'off' : 'on'); tPendDraw(); if (soundOn()) { chime(); toast('Sound on: this tune plays when a JSEA needs approval', 'good', 4000); } else toast('Sound off', '', 2500); }
   else if (a === 'tPendToggle') { G.pendOpen = !G.pendOpen; tPendDraw(); }
   else if (a === 'tPendRefresh') { tPendLoad(true); if (G.tPoll && G.tSess) G.tPoll(); else if (!G.tSess && !G.tDoc) tHome(); }
   else if (a === 'tPendOpen') { var pid = b.dataset.id, psid = b.dataset.sid; G.pendOpen = false; if (!G.tSess || G.tSess.id !== psid) tSession(psid); tJsea(pid); }
@@ -4136,7 +4235,7 @@ function trainerClick(a, id, b) {
     if (!entry.assess) return toast('Enter the assessment.', 'err');
     if (!area) return toast('Choose or type the site / area.', 'err');
     if (!v('ss') && !/^[A-Za-z]{2,4}$/.test(v('xc'))) return toast('Enter a 2 to 4 letter permit code for this site.', 'err');
-    rpc('createSession', { tt: G.tt, entry: entry, site: site, scenario: !!c.site, siteArea: area, siteCode: v('xc'), date: v('sd'), modes: v('sm'), emailTrainer: document.getElementById('se').checked }).then(function (r) { saveLastSite(G.T.name, area, r.session.siteCode); tSession(r.session.id); }, tFail);
+    rpc('createSession', { tt: G.tt, entry: entry, site: site, scenario: !!c.site, siteArea: area, siteCode: v('xc'), date: v('sd'), modes: v('sm') }).then(function (r) { saveLastSite(G.T.name, area, r.session.siteCode); tSession(r.session.id); }, tFail);
   }
   else if (a === 'tDelete') {
     var all = G.tSess.docs, n = all.length, open = all.filter(function (d) { return d.status !== 'approved' || d.amending || d.pdfPending; }).length;
