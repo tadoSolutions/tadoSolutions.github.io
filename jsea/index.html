@@ -3520,7 +3520,7 @@ function statusChip(d) {
 }
 function drawTop() {
   var d = G.doc, t = document.querySelector('.top'); if (!t || !d || G.role !== 'student') return;
-  t.innerHTML = '<div class="row"><div class="t"><b>' + h(d.session.unit + ' ' + d.session.assess) + '</b><span>' + h(d.mode === 'crew' ? d.crewName : 'Individual') + ' · ' + h(d.f.taskDesc || d.session.task) + '</span></div>' +
+  t.innerHTML = '<div class="row"><div class="t"><b>' + h(d.session.unit + ' ' + d.session.assess) + '</b><span>' + h(d.mode === 'crew' ? d.crewName + (d.pin ? ' (' + d.pin + ')' : '') : 'Individual') + ' · ' + h(d.f.taskDesc || d.session.task) + '</span></div>' +
     '<div class="av">' + d.members.map(function (m) { return '<i class="' + (m.id === G.me || G.online.indexOf(m.id) >= 0 ? '' : 'off') + '" title="' + h(m.name) + '">' + initials(m.name) + '</i>'; }).join('') + '</div>' + statusChip(d) + '<span class="dot"></span></div>';
   setBusy(0);
 }
@@ -3739,8 +3739,10 @@ function issueList(list) {
 function aiCard(d) {
   if (!d.aiOn || d.status !== 'draft' || !d.open) return '';
   var done = d.ai && aiFresh(d), n = d.issues.filter(function (i) { return /^AI check/.test(i.msg); }).length;
-  return '<div class="aibox"><button class="btn ghost" data-act="aiCheck"' + (d.aiLeft ? '' : ' disabled') + '>' + (d.ai ? 'Run the AI check again' : 'AI check of hazards and controls') + '</button>' +
-    '<p class="hint">' + (done ? (n ? n + ' point' + (n > 1 ? 's' : '') + ' flagged above. ' : 'Checked: nothing flagged. ') : '') +
+  var todo = {}; d.issues.forEach(function (i) { if (i.level === 'error' && i.sec === 'steps') todo[i.id || '?'] = 1; });
+  var left = Object.keys(todo).length;                  // job steps that are not filled out yet: the check waits for all of them
+  return '<div class="aibox"><button class="btn ghost" data-act="aiCheck"' + (d.aiLeft && !left ? '' : ' disabled') + '>' + (d.ai ? 'Run the AI check again' : 'AI check of hazards and controls') + '</button>' +
+    '<p class="hint">' + (left ? '<b>Fill out every job step first (' + left + ' still to finish).</b> ' : done ? (n ? n + ' point' + (n > 1 ? 's' : '') + ' flagged above. ' : 'Checked: nothing flagged. ') : '') +
     'The AI check looks at whether each hazard fits its job step and whether each control addresses its hazard. It is a guide only. Your trainer makes the decision. ' +
     (d.aiLeft ? d.aiLeft + ' check' + (d.aiLeft > 1 ? 's' : '') + ' left.' : 'No checks left for this JSEA.') + '</p></div>';
 }
@@ -3864,7 +3866,7 @@ function addStep(refId, before) {
   else o = i < st.length - 1 ? (st[i].o + st[i + 1].o) / 2 : st[i].o + 1;
   hz[rid()] = newHazard(1);
   var nid = rid(); G.stepGo = nid;
-  tracked(G.L.set('draft/steps/' + nid, { o: o, text: '', resp: G.doc.mode === 'crew' ? 'All' : respName(G.me || G.doc.members[0]), hz: hz }));
+  tracked(G.L.set('draft/steps/' + nid, { o: o, text: '', resp: G.doc.mode === 'crew' ? 'All' : respName(G.doc.members.filter(function (m) { return m.id === G.me; })[0] || G.doc.members[0]), hz: hz }));
 }
 function moveStep(id, dir) {
   var st = liveSteps(), i = st.map(function (x) { return x.id; }).indexOf(id), j = i + dir, u = {};
