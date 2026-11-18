@@ -3790,7 +3790,7 @@ document.addEventListener('click', function (e) {
   if (G.role === 'trainer') return trainerClick(a, id, b);
   if (a === 'tab') { G.tab = id; refresh(); window.scrollTo(0, 0); }
   else if (a === 'matrix') matrix();
-  else if (a === 'aiCheck') settle().then(function () { return rpc('aiReview', { token: G.token }); }).then(function (r) { accept(r.doc); drawIssues(); toast(r.found ? 'AI check: ' + r.found + ' point' + (r.found > 1 ? 's' : '') + ' to look at' : 'AI check: nothing flagged', r.found ? '' : 'good', 5000); }, fail);
+  else if (a === 'aiCheck') settle().then(function () { return rpc('aiReview', { token: G.token }); }).then(function (r) { accept(r.doc); drawIssues(); if (r.same) return toast('Nothing has changed since the last AI check, so it was not run again. ' + (r.found ? 'The ' + r.found + ' flagged point' + (r.found > 1 ? 's are' : ' is') + ' in the check list.' : 'Nothing was flagged.'), '', 6000); toast(r.found ? 'AI check: ' + r.found + ' point' + (r.found > 1 ? 's' : '') + ' to look at' : 'AI check: nothing flagged', r.found ? '' : 'good', 5000); }, fail);
   else if (a === 'seg') { var k = b.parentNode.dataset.k; setVal(k, getVal(k) === b.dataset.v ? '' : b.dataset.v, true); patch(); drawTabs(); }
   else if (a === 'chip') { setVal(b.dataset.k, getVal(b.dataset.k) === 'Y' ? '' : 'Y', true); patch(); }
   else if (a === 'fill') { var n = { permit: 7, have: 6, high: 8, haz: 23 }[id]; for (var i = id === 'permit' ? 1 : 0; i < n; i++) if (!getVal('f:' + id + '.' + i)) setVal('f:' + id + '.' + i, b.dataset.v, true); patch(); drawTabs(); }
