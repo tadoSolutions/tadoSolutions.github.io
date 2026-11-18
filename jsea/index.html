@@ -236,6 +236,11 @@ body.waiting .btn.block.wait{display:flex}
 .pendt em{font-style:normal;flex:none;min-width:22px;height:22px;line-height:22px;border-radius:11px;background:#98a2b3;color:#fff;text-align:center;font-size:12.5px;padding:0 6px}
 .pend.has .pendt em{background:var(--err)}
 .pendl{max-width:1180px;margin:0 auto;padding:0 12px 8px;max-height:50vh;overflow:auto}
+
+.aibox{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.aibox .btn{width:100%}
+.aibox .hint{margin:8px 0 0}
+.seg button{min-width:44px}
 </style>
 </head>
 <body>
@@ -2577,6 +2582,9 @@ var FORM = {
     ['OTHER', 'Any other hazard not listed above.']],
   cop: ['Hazardous Substances', 'Electrical Practices for construction work', 'Excavation', 'Manual Handling', 'Moving Plant on Construction Sites',
     'Noise Management & protection of hearing', 'Work in hot and cold environments', 'Work near overhead power lines', 'Prevention of falls in workplace', 'Abrasive Blasting'],
+  /* "Have you?" checks that do not apply to every job and so may be answered N/A:
+     safety data sheets (hazardous chemicals only), work interfaces, new members, inspection and tagging. */
+  haveNA: [2, 3, 4, 5],
   /* Legislation is the same for every EIM campus (all in Queensland), so it is chosen from buttons. */
   leg: {
     act: ['WHS Act 2011 (Qld)', 'Electrical Safety Act 2002 (Qld)'],
@@ -2608,6 +2616,18 @@ function rid() {
   return s;
 }
 function clean(v, max) { return String(v == null ? '' : v).replace(/[\u0000-\u0008\u000b-\u001f]/g, '').trim().slice(0, max || 200); }
+/** A fingerprint of one step hazard (step, hazard and control text). An AI comment is shown only while this is unchanged. */
+function hsig(st, hz) {
+  var s = [st.text, hz.text, hz.control].join('|').toLowerCase().replace(/\s+/g, ' '), n = 5381;
+  for (var i = 0; i < s.length; i++) n = ((n << 5) + n + s.charCodeAt(i)) | 0;
+  return String(n);
+}
+/** True when the AI check has looked at every hazard as it is written now. */
+function aiFresh(d) {
+  var seen = (d.ai && d.ai.sigs) || [], ok = !!d.ai;
+  d.steps.forEach(function (st) { st.hazards.forEach(function (hz) { if (hz.text && seen.indexOf(hsig(st, hz)) < 0) ok = false; }); });
+  return ok;
+}
 function blankHazard() { return { id: rid(), text: '', l: 0, s: 0, control: '', rl: 0, rs: 0 }; }
 
 /** Form fields a learner may fill in. Tick lists use index keys, e.g. ppe.3, haz.11 */
@@ -2676,6 +2696,7 @@ function validate(d) {
     if (miss) err(k === 'haz' ? 'hazards' : 'checks', names[k] + ': ' + miss + ' item' + (miss > 1 ? 's' : '') + ' not answered');
   });
   HAVE.forEach(function (t, i) { if (f['have.' + i] === 'N') warn('checks', 'Not done before starting: ' + t); });
+  if (f['have.0'] === 'NA' || f['have.1'] === 'NA') err('checks', 'Have You?: visiting the worksite and checking procedures apply to every job, so answer Yes or No');
   /* Compliance: answers that are never acceptable on a JSEA, whatever the task. These stop sign-on and submission. */
   var any = function (k, n) { for (var i = 0; i < n; i++) if (f[k + '.' + i] === 'Y') return true; return false; };
   var isolates = d.steps.some(function (st) { return /isolat|lock\s*(and|&|\/)?\s*tag|de-?energi[sz]|test(ed|ing)? for dead|prove (it )?dead/i.test(st.text || ''); }) || f['ppe.15'] === 'Y';
@@ -2726,6 +2747,12 @@ function validate(d) {
   if (d.mode === 'crew' && d.members.length < 2) err('sign', 'A crew needs at least two members (the reviewer must be someone other than the preparer)');
   var unsigned = d.members.filter(function (m) { return !(d.sigs || {})[m.id]; });
   if (unsigned.length) err('sign', 'Waiting for sign-on: ' + unsigned.map(function (m) { return m.name; }).join(', '));
+  /* AI check (advisory): comments are warnings, never errors, and drop away as soon as that hazard or control is edited. */
+  if (d.ai && d.ai.items) d.ai.items.forEach(function (it) {
+    d.steps.forEach(function (st, n) { if (st.id === it.s) st.hazards.forEach(function (hz) {
+      if (hz.id === it.h && hsig(st, hz) === it.sig) warn('steps', 'AI check, step ' + (n + 1) + (it.k === 'control' ? ' control' : ' hazard') + ': ' + it.msg, st.id);
+    }); });
+  });
   return out;
 }
 
@@ -2929,7 +2956,10 @@ async function buildJseaPdf(PDFLib, templateBytes, doc, opts) {
   for (i = 0; i < 5; i++) if (f['ppeOther.' + i]) { box(p1, 724, OT[i] + 0.8, 726, OT[i + 1] - 0.8); txt(p1, f['ppeOther.' + i], 675, OT[i + 1] - 2.6, { size: 7, w: 100 }); }
   var RT = [246, 260, 273, 286, 299, 312, 324, 337, 350];
   for (i = 0; i < 7; i++) yn(p1, f['permit.' + i], 133, RT[i], 162, RT[i + 1]);
-  for (i = 0; i < 6; i++) yn(p1, f['have.' + i], 358, RT[i], 391, RT[i + 1]);
+  for (i = 0; i < 6; i++) {                           // Have you?: tick, n/a, or the word No (a check that was not done must not read as not applicable)
+    if (f['have.' + i] === 'N') txt(p1, 'No', 358, (RT[i] + RT[i + 1]) / 2 + 2.8, { size: 7.5, bold: true, center: 33 });
+    else yn(p1, f['have.' + i], 358, RT[i], 391, RT[i + 1]);
+  }
   for (i = 0; i < 8; i++) yn(p1, f['high.' + i], 672, RT[i], 778, RT[i + 1]);
   /* Legislation is chosen from buttons and can be more than one item. The boxes are small, so when several are chosen
      they are printed in their usual short forms with the State once at the end. */
@@ -3115,8 +3145,8 @@ function initials(n) { return String(n).trim().split(/\s+/).map(function (w) { r
 function when(iso) { if (!iso) return ''; var d = new Date(iso); return d.toLocaleDateString('en-AU', { day: '2-digit', month: 'short' }) + ' ' + d.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }); }
 
 /** Calls the server. In Apps Script this is google.script.run; in the offline demo the server code runs in the page. */
-function rpc(action, payload) {
-  var shown = !QUIET[action];                          // background refreshes do not show the waiting indicator
+function rpc(action, payload, quiet) {
+  var shown = !QUIET[action] && !quiet;                          // background refreshes do not show the waiting indicator
   setBusy(1); if (shown) waitUi(1);
   return new Promise(function (resolve, reject) {
     function done(r) { setBusy(-1); if (shown) waitUi(-1); if (r && r.ok) resolve(r.data); else reject(new Error((r && r.error) || 'No response from the server')); }
@@ -3524,9 +3554,9 @@ function drawTabs() {
 }
 function inp(k, ph, max) { return '<input type="text" data-k="' + k + '" value="' + h(getVal(k)) + '" placeholder="' + h(ph || '') + '" maxlength="' + (max || 120) + '">'; }
 function area(k, ph, rows) { return '<textarea data-k="' + k + '" rows="' + (rows || 1) + '" placeholder="' + h(ph || '') + '">' + h(getVal(k)) + '</textarea>'; }
-function seg(k, a, b) { var v = getVal(k); return '<div class="seg" data-k="' + k + '"><button data-act="seg" data-v="' + a[0] + '" class="' + (v === a[0] ? 'on' : '') + '">' + a[1] + '</button><button data-act="seg" data-v="' + b[0] + '" class="' + (v === b[0] ? 'on' : '') + '">' + b[1] + '</button></div>'; }
+function seg(k, a, b, c) { var v = getVal(k); return '<div class="seg" data-k="' + k + '">' + [a, b, c].filter(Boolean).map(function (o) { return '<button data-act="seg" data-v="' + o[0] + '" class="' + (v === o[0] ? 'on' : '') + '">' + o[1] + '</button>'; }).join('') + '</div>'; }
 function ynList(key, items, title, hint) {
-  return '<div class="card"><h2>' + title + '</h2>' + (hint ? '<p class="hint">' + hint + '</p>' : '') + items.map(function (t, i) { var k = 'f:' + key + '.' + i; return '<div class="q' + (getVal(k) ? '' : ' miss') + '"><div class="txt">' + h(t) + '</div>' + seg(k, ['Y', 'Yes'], ['N', 'No']) + '</div>'; }).join('') +
+  return '<div class="card"><h2>' + title + '</h2>' + (hint ? '<p class="hint">' + hint + '</p>' : '') + items.map(function (t, i) { var k = 'f:' + key + '.' + i; return '<div class="q' + (getVal(k) ? '' : ' miss') + '"><div class="txt">' + h(t) + '</div>' + seg(k, ['Y', 'Yes'], ['N', 'No'], key === 'have' && FORM.haveNA.indexOf(i) >= 0 ? ['NA', 'N/A'] : null) + '</div>'; }).join('') +
     (key === 'have' ? '' : '<button class="link" data-act="fill" data-id="' + key + '" data-v="N">Mark unanswered as No</button>') + '</div>';
 }
 function drawMain() {
@@ -3558,7 +3588,7 @@ function drawMain0() {
   } else if (G.tab === 'checks') {
     html += '<div class="card"><h2>Additional PPE required</h2><p class="hint">Minimum PPE is compulsory: safety glasses, safety boots, long sleeve shirt (buttoned down) and long leg trousers. Tap any additional PPE this job needs.</p><div class="chips">' +
       FORM.ppe.map(function (t, i) { var k = 'f:ppe.' + i; return '<button class="chip' + (getVal(k) === 'Y' ? ' on' : '') + '" data-act="chip" data-k="' + k + '">' + h(t) + '</button>'; }).join('') + '</div><label>Other PPE</label><div class="grid2">' + inp('f:ppeOther.0', '', 30) + inp('f:ppeOther.1', '', 30) + '</div></div>' +
-      ynList('permit', FORM.permit, 'Permit required') + ynList('have', FORM.have, 'Have you?') +
+      ynList('permit', FORM.permit, 'Permit required') + ynList('have', FORM.have, 'Have you?', 'Choose N/A only where the check does not apply to this job, for example safety data sheets when no hazardous chemicals are used.') +
       ynList('high', FORM.high, 'Does the job involve prescribed high risk activities?', 'If any answer is Yes, see your supervisor to obtain the relevant SWMS or to help create a new one.') +
       '<div class="card"><h2>Codes of practice that apply</h2><div class="chips">' + FORM.cop.map(function (t, i) { var k = 'f:cop.' + i; return '<button class="chip' + (getVal(k) === 'Y' ? ' on' : '') + '" data-act="chip" data-k="' + k + '">' + h(t) + '</button>'; }).join('') + '</div><label>Other</label>' + inp('f:copOther', '', 60) + '</div>';
   } else if (G.tab === 'hazards') {
@@ -3590,10 +3620,19 @@ function drawMain0() {
   bar.innerHTML = '<div class="bar"><button class="btn ghost" data-act="matrix">Risk matrix</button>' + (i < 4 ? '<button class="btn" data-act="tab" data-id="' + TABS[i + 1][0] + '">Next: ' + TABS[i + 1][1] + '</button>' : '') + '</div>';
   showPin();
 }
-function drawIssues() { var e = document.getElementById('issues'); if (e) e.innerHTML = issueList(G.doc.issues.filter(function (i) { return i.sec !== 'sign'; })); document.querySelectorAll('.step').forEach(function (s) { var id = s.id.slice(3); s.classList.toggle('bad', G.doc.issues.some(function (i) { return i.id === id && i.level === 'error'; })); }); var sb = document.getElementById('submit'); if (sb) sb.disabled = !canSubmit(); var lk = document.getElementById('lockbtn'); if (lk) lk.disabled = !contentDone(); }
+function drawIssues() { var e = document.getElementById('issues'); if (e) e.innerHTML = issueList(G.doc.issues.filter(function (i) { return i.sec !== 'sign'; })); var aw = document.getElementById('aiw'), ah = aiCard(G.doc); if (aw && aw.dataset.h !== ah) { aw.dataset.h = ah; aw.innerHTML = ah; } document.querySelectorAll('.step').forEach(function (s) { var id = s.id.slice(3); s.classList.toggle('bad', G.doc.issues.some(function (i) { return i.id === id && i.level === 'error'; })); }); var sb = document.getElementById('submit'); if (sb) sb.disabled = !canSubmit(); var lk = document.getElementById('lockbtn'); if (lk) lk.disabled = !contentDone(); }
 function issueList(list) {
   if (!list.length) return '<div class="note good"><b>Nothing outstanding</b>Every section is complete.</div>';
   return '<ul class="issues">' + list.map(function (i) { return '<li class="' + (i.level === 'warn' ? 'warn' : '') + '" data-act="goto" data-id="' + i.sec + ':' + i.id + '">' + h(i.msg) + '</li>'; }).join('') + '</ul>';
+}
+/* AI check (optional, advisory). Shown while the JSEA is being prepared, when the trainer's site has it switched on. */
+function aiCard(d) {
+  if (!d.aiOn || d.status !== 'draft' || !d.open) return '';
+  var done = d.ai && aiFresh(d), n = d.issues.filter(function (i) { return /^AI check/.test(i.msg); }).length;
+  return '<div class="aibox"><button class="btn ghost" data-act="aiCheck"' + (d.aiLeft ? '' : ' disabled') + '>' + (d.ai ? 'Run the AI check again' : 'AI check of hazards and controls') + '</button>' +
+    '<p class="hint">' + (done ? (n ? n + ' point' + (n > 1 ? 's' : '') + ' flagged above. ' : 'Checked: nothing flagged. ') : '') +
+    'The AI check looks at whether each hazard fits its job step and whether each control addresses its hazard. It is a guide only. Your trainer makes the decision. ' +
+    (d.aiLeft ? d.aiLeft + ' check' + (d.aiLeft > 1 ? 's' : '') + ' left.' : 'No checks left for this JSEA.') + '</p></div>';
 }
 function canSubmit() { return isPrep() && !G.doc.open && !G.doc.issues.some(function (i) { return i.level === 'error'; }); }
 function contentDone() { return !G.doc.issues.some(function (i) { return i.level === 'error' && i.sec !== 'sign'; }); }
@@ -3621,7 +3660,7 @@ function submitCard(d) {
 function signTab() {
   var d = G.doc, html = '';
   if (d.amending || d.amendments.length) html += amendCard(d, d.amending);
-  html += '<div class="card"><h2>Check list</h2><div id="issues">' + issueList(d.issues.filter(function (i) { return i.sec !== 'sign'; })) + '</div></div>';
+  html += '<div class="card"><h2>Check list</h2><div id="issues">' + issueList(d.issues.filter(function (i) { return i.sec !== 'sign'; })) + '</div><div id="aiw">' + aiCard(d) + '</div></div>';
   html += '<div class="card"><h2>' + (d.mode === 'crew' ? 'Crew sign on' : 'Sign on') + '</h2>' +
     (d.mode === 'crew' ? '<p class="hint">Crew PIN: <b id="pinv" style="letter-spacing:3px"></b> · crew members scan the QR code and choose “Join a crew”.</p>' : '') +
     '<p class="hint">When the JSEA is finished, the first person to sign on locks it so nothing can change while ' + (d.mode === 'crew' ? 'the crew signs' : 'you sign') + '. By signing on you confirm you have read this JSEA, understand the hazards and controls, and will follow them.</p>' + crewRows(d, true) +
@@ -3655,7 +3694,7 @@ function summaryHtml(d, forTrainer) {
     '<b>Competence</b><span>' + h(['E&I Technician'].concat([0, 1, 2, 3, 4].map(function (i) { return f['comp.' + i]; }).filter(Boolean)).join(', ')) + '</span>' +
     '<b>Extra PPE</b><span>' + h(ppe.join(', ') || 'None selected') + '</span><b>Permits</b><span>' + h(yes('permit', FORM.permit).join(', ') || 'None') + '</span>' +
     '<b>High risk</b><span>' + h(yes('high', FORM.high).join(', ') || 'None') + '</span><b>Hazards present</b><span>' + h(yes('haz', FORM.haz).join(', ') + (f.hazOther ? ' (' + f.hazOther + ')' : '') || 'None') + '</span>' +
-    '<b>Not done</b><span>' + h(FORM.have.filter(function (t, i) { return f['have.' + i] === 'N'; }).join(' ') || 'All “Have you?” checks answered Yes') + '</span>' +
+    '<b>Not done</b><span>' + h(FORM.have.filter(function (t, i) { return f['have.' + i] === 'N'; }).join(' ') || (FORM.have.some(function (t, i) { return f['have.' + i] === 'NA'; }) ? 'None. Not applicable: ' + FORM.have.filter(function (t, i) { return f['have.' + i] === 'NA'; }).join(' ') : 'All “Have you?” checks answered Yes')) + '</span>' +
     '<b>Legislation</b><span>' + h([f.act, f.reg, f.legOther].filter(Boolean).join('; ') || '–') + '</span><b>Codes</b><span>' + h(yes('cop', FORM.cop).concat(f.copOther ? [f.copOther] : []).join(', ') || '–') + '</span>' +
     '<b>Procedures</b><span>' + h([0, 1, 2, 3, 4].map(function (i) { return f['proc.' + i]; }).filter(Boolean).join(', ') || '–') + '</span></div></div>';
   var w = d.issues.filter(function (i) { return i.level === 'warn'; });
@@ -3738,6 +3777,7 @@ document.addEventListener('click', function (e) {
   if (G.role === 'trainer') return trainerClick(a, id, b);
   if (a === 'tab') { G.tab = id; refresh(); window.scrollTo(0, 0); }
   else if (a === 'matrix') matrix();
+  else if (a === 'aiCheck') settle().then(function () { return rpc('aiReview', { token: G.token }); }).then(function (r) { accept(r.doc); drawIssues(); toast(r.found ? 'AI check: ' + r.found + ' point' + (r.found > 1 ? 's' : '') + ' to look at' : 'AI check: nothing flagged', r.found ? '' : 'good', 5000); }, fail);
   else if (a === 'seg') { var k = b.parentNode.dataset.k; setVal(k, getVal(k) === b.dataset.v ? '' : b.dataset.v, true); patch(); drawTabs(); }
   else if (a === 'chip') { setVal(b.dataset.k, getVal(b.dataset.k) === 'Y' ? '' : 'Y', true); patch(); }
   else if (a === 'fill') { var n = { permit: 7, have: 6, high: 8, haz: 23 }[id]; for (var i = id === 'permit' ? 1 : 0; i < n; i++) if (!getVal('f:' + id + '.' + i)) setVal('f:' + id + '.' + i, b.dataset.v, true); patch(); drawTabs(); }
@@ -3977,7 +4017,14 @@ function drawSession() {
 }
 function tJsea(id, quiet) {
   if (!quiet) { $app.innerHTML = tTop('JSEA', '', 'tBackSession') + '<div class="wrap wide" id="main"><p class="center"><span class="spin"></span></p></div><div id="bar"></div>'; window.scrollTo(0, 0); }
-  rpc('open', { tt: G.tt, id: id }).then(function (r) { G.tDoc = r.doc; drawJsea(); }, tFail);
+  rpc('open', { tt: G.tt, id: id }).then(function (r) {
+    G.tDoc = r.doc; drawJsea();
+    // AI check for the trainer: run quietly when a JSEA is waiting for approval and has not been checked as it stands now
+    if (r.doc.aiOn && r.doc.status === 'approval' && !aiFresh(r.doc) && G.aiTried !== r.doc.id + r.doc.rev) {
+      G.aiTried = r.doc.id + r.doc.rev;
+      rpc('aiReview', { tt: G.tt, id: id }, true).then(function (x) { if (G.tDoc && G.tDoc.id === x.doc.id) { G.tDoc = x.doc; drawJsea(); if (x.found) toast('AI check: ' + x.found + ' point' + (x.found > 1 ? 's' : '') + ' to look at', '', 5000); } }, function () {});
+    }
+  }, tFail);
 }
 function drawJsea() {
   var d = G.tDoc, t = document.querySelector('.top .t'), head = '', bar = '';
