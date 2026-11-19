@@ -2791,7 +2791,7 @@ function validate(d) {
       if (!a.stepNo) err('amend', 'Amendment ' + (n + 1) + ': give the step number');
     });
   }
-  if (d.mode === 'crew' && d.members.length < 2) err('sign', 'A crew needs at least two members (the reviewer must be someone other than the preparer)');
+  if (d.mode === 'crew' && d.members.length < 2) warn('sign', 'No other crew member has joined, so the trainer will review this JSEA');
   var unsigned = d.members.filter(function (m) { return !(d.sigs || {})[m.id]; });
   if (unsigned.length) err('sign', 'Waiting for sign-on: ' + unsigned.map(function (m) { return m.name; }).join(', '));
   /* AI check (advisory): comments are warnings, never errors, and drop away as soon as that hazard or control is edited. */
@@ -3759,7 +3759,7 @@ function issueList(list) {
 /* AI check (optional, advisory). Shown while the JSEA is being prepared, when the trainer's site has it switched on. */
 function aiCard(d) {
   if (!d.aiOn || d.status !== 'draft' || !d.open) return '';
-  if (d.mode === 'crew') return '<div class="aibox"><p class="hint">AI check: for a work crew it runs for the reviewer when the JSEA is submitted for review. The reviewer can return the JSEA with the findings.</p></div>';
+  if (d.mode === 'crew' && d.members.length > 1) return '<div class="aibox"><p class="hint">AI check: for a work crew it runs for the reviewer when the JSEA is submitted for review. The reviewer can return the JSEA with the findings.</p></div>';
   var done = d.ai && aiFresh(d), n = d.issues.filter(function (i) { return /^AI check/.test(i.msg); }).length;
   var todo = {}; d.issues.forEach(function (i) { if (i.level === 'error' && i.sec === 'steps') todo[i.id || '?'] = 1; });
   var left = Object.keys(todo).length;                  // job steps that are not filled out yet: the check waits for all of them
@@ -3784,9 +3784,9 @@ function submitCard(d) {
     html += '<div class="card"><h2>Submit</h2>';
     if (d.mode === 'crew') {
       var others = d.members.filter(function (m) { return m.id !== G.me; });
-      html += '<p class="hint">Prepare → <b>Review</b> (crew member) → Approve (trainer). Choose who reviews the JSEA:</p><div class="chips">' + (others.length ? others.map(function (m) { return '<button class="chip' + (G.pickRev === m.id ? ' on' : '') + '" data-act="pickRev" data-id="' + m.id + '">' + h(m.name) + '</button>'; }).join('') : '<span class="hint">No other crew members have joined yet.</span>') + '</div><p></p>';
+      html += '<p class="hint">Prepare → <b>Review</b> (crew member) → Approve (trainer). Choose who reviews the JSEA:</p><div class="chips">' + (others.length ? others.map(function (m) { return '<button class="chip' + (G.pickRev === m.id ? ' on' : '') + '" data-act="pickRev" data-id="' + m.id + '">' + h(m.name) + '</button>'; }).join('') : '<span class="hint">No other crew members have joined, so there is no one to review it. It will go straight to your trainer for review and approval.</span>') + '</div><p></p>';
     } else html += '<p class="hint">Prepare → <b>Review and approve</b> (trainer ' + h(d.session.trainer) + ').</p>';
-    html += '<button class="btn block" id="submit" data-act="submit"' + (canSubmit() ? '' : ' disabled') + '>' + (d.mode === 'crew' ? 'Submit for review' : 'Submit to trainer') + '</button></div>';
+    html += '<button class="btn block" id="submit" data-act="submit"' + (canSubmit() ? '' : ' disabled') + '>' + (d.mode === 'crew' && d.members.length > 1 ? 'Submit for review' : 'Submit to trainer') + '</button></div>';
   } else html += '<div class="note info"><b>Waiting for ' + h((d.members.filter(function (m) { return m.id === d.preparerId; })[0] || {}).name) + '</b>The person who prepared the JSEA submits it once everyone has signed on.</div>';
   return html;
 }
@@ -3978,7 +3978,7 @@ document.addEventListener('click', function (e) {
   else if (a === 'pickRev') { G.pickRev = id; G.sig = null; refresh(); }
   else if (a === 'remove') { confirm2('Remove this person from the crew?', 'Remove').then(function () { act('removeMember', { memberId: id }).catch(fail); }); }
   else if (a === 'submit') {
-    if (d.mode === 'crew' && !G.pickRev) return toast('Choose a crew member to review the JSEA.', 'err');
+    if (d.mode === 'crew' && d.members.length > 1 && !G.pickRev) return toast('Choose a crew member to review the JSEA.', 'err');
     act('submit', { reviewerId: G.pickRev }).then(function () { window.scrollTo(0, 0); toast('Submitted.', 'good'); }, fail);
   }
   else if (a === 'recall') { confirm2('Recall the JSEA? Everyone will need to sign on again before you resubmit.', 'Recall').then(function () { act('recall').catch(fail); }); }
