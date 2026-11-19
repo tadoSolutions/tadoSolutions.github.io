@@ -280,6 +280,30 @@ body.waiting .btn.block.wait{display:flex}
 .status.cancelled{background:#eceef2;color:#667085}.jrow.gone{opacity:.6;background:#f6f7f9}.jrow.gone .n{text-decoration:line-through;text-decoration-color:#98a2b3}
 .who .link.red{color:var(--err)}
 @media (max-width:560px){.bar{flex-wrap:wrap}.bar .btn,.bar .btn.ghost{flex:1 1 44%;max-width:none}}
+
+/* ---- trainer header ---- */
+.top.ttop{background:linear-gradient(180deg,#22398a 0%,var(--navy) 100%);box-shadow:0 2px 10px rgba(16,24,40,.22);padding:8px 12px}
+.ttop .row{gap:10px}
+.ttop .mark{flex:none;width:38px;height:38px;border-radius:10px;background:#fff;color:var(--navy);font-weight:800;font-size:12.5px;letter-spacing:.4px;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 -3px 0 #f6b58a}
+.ttop .t b{font-size:16.5px;letter-spacing:.1px}
+.ttop .t span{font-size:12.5px;opacity:.82}
+.tback,.tbell,.tme{flex:none;width:40px;height:40px;border-radius:50%;border:0;display:flex;align-items:center;justify-content:center;color:#fff;background:rgba(255,255,255,.12);position:relative;padding:0}
+.tback:hover,.tbell:hover,.tme:hover{background:rgba(255,255,255,.22)}
+.tback:focus-visible,.tbell:focus-visible,.tme:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.tbell em{position:absolute;top:-3px;right:-3px;min-width:19px;height:19px;border-radius:10px;background:#ff5a4f;color:#fff;font-style:normal;font-weight:800;font-size:11.5px;line-height:19px;text-align:center;padding:0 5px;box-shadow:0 0 0 2px var(--navy)}
+.tbell.has{background:rgba(255,255,255,.22)}
+.tme{background:#fff;color:var(--navy);font-weight:800;font-size:14px;letter-spacing:.3px}
+.tme:hover{background:#eef3ff}
+.tme .dot{position:absolute;right:-1px;bottom:-1px;width:11px;height:11px;box-shadow:0 0 0 2px var(--navy)}
+.tmenu{position:absolute;right:12px;top:calc(100% + 6px);width:min(280px,calc(100vw - 24px));background:#fff;color:var(--ink);border-radius:14px;box-shadow:0 12px 32px rgba(16,24,40,.28);border:1px solid var(--line);overflow:hidden;z-index:30}
+.tmenu .who2{padding:12px 14px;background:#f6f8fc;border-bottom:1px solid var(--line)}
+.tmenu .who2 b{display:block;color:var(--navy);font-size:15px}.tmenu .who2 span{display:block;color:var(--mute);font-size:12.5px;overflow:hidden;text-overflow:ellipsis}
+.tmenu button{display:flex;justify-content:space-between;align-items:center;width:100%;border:0;background:#fff;padding:13px 14px;font-size:15px;color:var(--ink);text-align:left;border-top:1px solid #f0f2f6;min-height:46px}
+.tmenu button:first-of-type{border-top:0}
+.tmenu button:hover{background:#f6f8fc}
+.tmenu .out{color:var(--err);font-weight:700}
+.tmenu .pill{font-size:12px;font-weight:700;border-radius:10px;padding:2px 9px;background:#eceef2;color:#667085}.tmenu .pill.on{background:#e3f6ea;color:#17683a}
+.top{position:sticky}
 </style>
 </head>
 <body>
@@ -3479,7 +3503,7 @@ function landTabs(on) {
     '<button role="tab" id="st" data-act="tStudent" class="' + (on === 'student' ? 'on' : '') + '" aria-selected="' + (on === 'student') + '">Student</button></div>';
 }
 function showCode() {
-  $app.innerHTML = '<div class="top"><div class="row"><div class="t"><b>EIM Training</b><span>Digital JSEA</span></div></div></div><div class="wrap narrow">' + landTabs('student') + '<div class="card"><h2>Join a JSEA session</h2>' +
+  $app.innerHTML = '<div class="top ttop"><div class="row"><span class="mark" aria-hidden="true">EIM</span><div class="t"><b>EIM Digital JSEA</b><span>EIM Training</span></div></div></div><div class="wrap narrow">' + landTabs('student') + '<div class="card"><h2>Join a JSEA session</h2>' +
     '<p class="hint">Scan the QR code on the projector, or type the 5 letter session code shown under it.</p><label>Session code</label><input type="text" id="code" maxlength="6" autocapitalize="characters" autocomplete="off" style="text-transform:uppercase;letter-spacing:4px;font-size:22px;text-align:center">' +
     '<p></p><button class="btn block" id="go">Continue</button></div></div>';
   document.getElementById('go').onclick = function () { G.code = document.getElementById('code').value.trim().toUpperCase(); if (G.code) start(); };
@@ -4039,14 +4063,34 @@ function askNote(title, hint, prefill) {
 
 /* ============================================================ trainer screens */
 function tStore(v) { try { if (v === undefined) return JSON.parse(sessionStorage.getItem('jsea_trainer') || 'null'); if (v === null) sessionStorage.removeItem('jsea_trainer'); else sessionStorage.setItem('jsea_trainer', JSON.stringify(v)); } catch (e) {} return null; }
+/* Trainer header: back or the EIM mark, the screen title, a bell with the number of JSEAs waiting, and the account
+   button (initials) that opens the menu: sound, change PIN, refresh, sign out. */
+function tInitials(n) { var p = String(n || '').trim().split(/\s+/); return ((p[0] || '').charAt(0) + (p.length > 1 ? p[p.length - 1].charAt(0) : '')).toUpperCase() || 'T'; }
 function tTop(title, sub, back) {
-  return '<div class="top"><div class="row">' + (back ? '<button class="icon" style="color:#fff" data-act="' + back + '" aria-label="Back">‹</button>' : '') + '<div class="t"><b>' + h(title) + '</b><span>' + h(sub || '') + '</span></div><button class="btn small ghost" data-act="tLogout">Sign out</button><span class="dot"></span></div></div>';
+  var n = G.pend ? G.pend.length : 0;
+  return '<div class="top ttop"><div class="row">' +
+    (back ? '<button class="tback" data-act="' + back + '" aria-label="Back"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' : '<span class="mark" aria-hidden="true">EIM</span>') +
+    '<div class="t"><b>' + h(title) + '</b><span>' + h(sub || '') + '</span></div>' +
+    '<button class="tbell' + (n ? ' has' : '') + '" id="tbell" data-act="tBell" aria-label="JSEAs that need your action"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M6 16V11a6 6 0 1112 0v5l1.6 2H4.4L6 16z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><path d="M10 20.5a2.2 2.2 0 004 0" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg><em id="tbadge"' + (n ? '' : ' hidden') + '>' + n + '</em></button>' +
+    '<button class="tme" data-act="tMenu" aria-label="Account menu" aria-haspopup="true">' + h(tInitials(G.T && G.T.name)) + '<span class="dot"></span></button>' +
+    '</div></div>';
+}
+function tMenu() {
+  var old = document.getElementById('tmenu'); if (old) return old.remove();
+  var top = document.querySelector('.top'); if (!top) return;
+  var m = el('<div id="tmenu" class="tmenu" role="menu"><div class="who2"><b>' + h(G.T.name) + '</b><span>' + h(G.T.email || 'Trainer') + '</span></div>' +
+    '<button role="menuitem" data-act="tSound">Notification tune <span class="pill' + (soundOn() ? ' on' : '') + '">' + (soundOn() ? 'On' : 'Off') + '</span></button>' +
+    '<button role="menuitem" data-act="tPin">Change my PIN</button>' +
+    '<button role="menuitem" data-act="tPendRefresh">Refresh</button>' +
+    '<button role="menuitem" class="out" data-act="tLogout">Sign out</button></div>');
+  top.appendChild(m);
+  setTimeout(function () { document.addEventListener('click', function close(e) { if (!m.contains(e.target) || e.target.closest('button')) { m.remove(); document.removeEventListener('click', close, true); } }, true); }, 0);
 }
 function trainerStart() {
   G.role = 'trainer'; G.tPoll = null;
   var saved = tStore();
   if (saved) { G.T = saved; G.tt = saved.tt; return tHome(); }
-  $app.innerHTML = '<div class="top"><div class="row"><div class="t"><b>EIM Training</b><span>Digital JSEA</span></div></div></div><div class="wrap narrow">' + landTabs('trainer') + '<div class="card"><h2>Trainer sign in</h2><label>Trainer</label><select id="tn"><option>Loading…</option></select><label>PIN</label><input type="password" id="tp" inputmode="numeric" autocomplete="off"><p></p><button class="btn block" data-act="tLogin">Sign in</button></div></div>';
+  $app.innerHTML = '<div class="top ttop"><div class="row"><span class="mark" aria-hidden="true">EIM</span><div class="t"><b>EIM Digital JSEA</b><span>EIM Training</span></div></div></div><div class="wrap narrow">' + landTabs('trainer') + '<div class="card"><h2>Trainer sign in</h2><label>Trainer</label><select id="tn"><option>Loading…</option></select><label>PIN</label><input type="password" id="tp" inputmode="numeric" autocomplete="off"><p></p><button class="btn block" data-act="tLogin">Sign in</button></div></div>';
   rpc('trainers').then(function (list) { document.getElementById('tn').innerHTML = list.map(function (n) { return '<option>' + h(n) + '</option>'; }).join(''); }, fail);
 }
 /* The site a trainer used last is remembered on this device, per trainer, so it does not have to be chosen every time. */
@@ -4075,18 +4119,20 @@ function tPendLoad(byHand) {
   }, function () {});
 }
 function tPendDraw() {
-  var top = document.querySelector('.top'), old = document.getElementById('pend');
-  if (!G.tt || G.role !== 'trainer' || !top || !G.pend) { if (old) old.remove(); return; }
-  var n = G.pend.length, sig = n + '|' + !!G.pendOpen + '|' + soundOn() + '|' + G.pend.map(function (x) { return x.id + x.kind; }).join(',');
+  var top = document.querySelector('.top'), old = document.getElementById('pend'), bell = document.getElementById('tbell'), badge = document.getElementById('tbadge');
+  var n = G.pend ? G.pend.length : 0;
+  if (badge) { badge.textContent = n; badge.hidden = !n; }
+  if (bell) bell.classList.toggle('has', !!n);
+  if (!G.tt || G.role !== 'trainer' || !top || !G.pend || !n) { if (old) old.remove(); return; }
+  var sig = n + '|' + !!G.pendOpen + '|' + G.pend.map(function (x) { return x.id + x.kind; }).join(',');
   if (old && old.dataset.sig === sig && old.previousElementSibling === top) return;
   if (old) old.remove();
   var rows = G.pend.map(function (x) {
     return '<button class="jrow" data-act="tPendOpen" data-id="' + x.id + '" data-sid="' + x.sessionId + '"><div class="n">' + h(x.crewName || x.names.join(', ')) +
       '<small>' + h([x.unit + ' ' + x.assess, x.task, x.ref].filter(Boolean).join(' · ')) + '</small></div><span class="status ' + (x.kind === 'approve' ? 'approval' : 'returned') + '">' + (x.kind === 'approve' ? 'Approve' : 'Send PDF') + '</span></button>';
   }).join('');
-  var e = el('<div id="pend" class="pend' + (n ? ' has' : '') + '"><div class="pendh"><button class="pendt" data-act="tPendToggle"' + (n ? '' : ' disabled') + '><em>' + n + '</em>' +
-    (n ? (n === 1 ? '1 JSEA needs' : n + ' JSEAs need') + ' your action' : 'Nothing is waiting for you') + (n ? '<span>' + (G.pendOpen ? '\u25B4' : '\u25BE') + '</span>' : '') + '</button>' +
-    '<button class="link" data-act="tSound" title="Play a tune when a JSEA needs approval">' + (soundOn() ? 'Sound on' : 'Sound off') + '</button><button class="link" data-act="tPendRefresh">Refresh</button></div>' + (n && G.pendOpen ? '<div class="pendl">' + rows + '</div>' : '') + '</div>');
+  var e = el('<div id="pend" class="pend has"><div class="pendh"><button class="pendt" data-act="tPendToggle"><em>' + n + '</em>' +
+    (n === 1 ? '1 JSEA needs' : n + ' JSEAs need') + ' your action<span>' + (G.pendOpen ? '\u25B4' : '\u25BE') + '</span></button></div>' + (G.pendOpen ? '<div class="pendl">' + rows + '</div>' : '') + '</div>');
   e.dataset.sig = sig;
   top.parentNode.insertBefore(e, top.nextSibling);
 }
@@ -4125,7 +4171,7 @@ function tHome() {
   blocks.sort(function (a, b) { return rank(a) - rank(b) || (a < b ? -1 : 1); });
   var d = new Date(), today = ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2) + '/' + d.getFullYear();
   var last = lastSiteOf(G.T.name), lastSite = last.area, lastKnown = (G.T.sites || []).some(function (x) { return x.name === lastSite; });
-  $app.innerHTML = tTop('Digital JSEA', 'Trainer: ' + G.T.name) + '<div class="wrap wide"><div class="cols"><div><div class="card"><h2>Start a session</h2>' +
+  $app.innerHTML = tTop('EIM Digital JSEA', 'Trainer: ' + G.T.name) + '<div class="wrap wide"><div class="cols"><div><div class="card"><h2>Start a session</h2>' +
     '<label>Unit code</label><select id="su">' + blocks.map(function (b) { return '<optgroup label="' + h(label(b)) + '">' + units.filter(function (u) { return u.block === b; }).sort(function (x, y) { return x.code < y.code ? -1 : 1; })
       .map(function (u) { return '<option value="' + h(u.code) + '">' + h(u.code + (has[u.code] ? '' : ' *') + (u.title ? ' – ' + u.title : '')) + '</option>'; }).join('') + '</optgroup>'; }).join('') +
     '<optgroup label="Not Listed"><option value="">Another unit (type the code)</option></optgroup></select><p class="hint" id="suh"></p>' +
@@ -4133,7 +4179,7 @@ function tHome() {
     '<label>Site / area</label><select id="ss">' + (G.T.sites || []).map(function (x) { return '<option' + (x.name === lastSite ? ' selected' : '') + '>' + h(x.name) + '</option>'; }).join('') + '<option value=""' + (lastSite && !lastKnown ? ' selected' : '') + '>Other (type it)</option></select><div id="xso"></div><p class="hint" id="pmt"></p>' +
     '<label>Date on the JSEA</label><input type="text" id="sd" value="' + today + '">' +
     '<label>Who prepares the JSEA?</label><select id="sm"><option value="crew">Work crews</option><option value="individual">Individual</option><option value="both">Students choose: work crew or individual</option></select>' +
-    '<p></p><button class="btn block" data-act="tCreate">Create QR code</button><p class="hint">Emails left today: ' + (G.T.quota < 0 ? 'unknown' : G.T.quota) + ' · <button class="link" data-act="tPin">Change my PIN</button></p></div></div>' +
+    '<p></p><button class="btn block" data-act="tCreate">Create QR code</button><p class="hint">Emails left today: ' + (G.T.quota < 0 ? 'unknown' : G.T.quota) + '</p></div></div>' +
     '<div><div class="card"><h2>Sessions</h2><div id="sl"><span class="spin"></span></div></div></div></div></div>';
   var su = document.getElementById('su'), st = document.getElementById('st'), ss = document.getElementById('ss');
   var firstWith = units.filter(function (u) { return has[u.code]; }).sort(function (x, y) { return x.code < y.code ? -1 : 1; })[0]; if (firstWith) su.value = firstWith.code;
@@ -4355,7 +4401,9 @@ function trainerClick(a, id, b) {
   else if (a === 'tOpenJsea') tJsea(id);
   else if (a === 'tStudent') { G.role = 'code'; showCode(); }
   else if (a === 'tTrainer') { G.role = 'trainer'; trainerStart(); }
-  else if (a === 'tSound') { store('jsea_sound', soundOn() ? 'off' : 'on'); tPendDraw(); if (soundOn()) { chime(); toast('Sound on: this tune plays when a JSEA needs approval', 'good', 4000); } else toast('Sound off', '', 2500); }
+  else if (a === 'tMenu') tMenu();
+  else if (a === 'tBell') { if (G.pend && G.pend.length) { G.pendOpen = !G.pendOpen; tPendDraw(); window.scrollTo({ top: 0, behavior: 'smooth' }); } else tPendLoad(true); }
+  else if (a === 'tSound') { store('jsea_sound', soundOn() ? 'off' : 'on'); if (soundOn()) { chime(); toast('Sound on: this tune plays when a JSEA needs approval', 'good', 4000); } else toast('Sound off', '', 2500); }
   else if (a === 'tPendToggle') { G.pendOpen = !G.pendOpen; tPendDraw(); }
   else if (a === 'tPendRefresh') { tPendLoad(true); if (G.tPoll && G.tSess) G.tPoll(); else if (!G.tSess && !G.tDoc) tHome(); }
   else if (a === 'tPendOpen') { var pid = b.dataset.id, psid = b.dataset.sid; G.pendOpen = false; if (!G.tSess || G.tSess.id !== psid) tSession(psid); tJsea(pid); }
