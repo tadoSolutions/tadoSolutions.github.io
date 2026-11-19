@@ -3342,7 +3342,7 @@ function matrix(opts) {            // opts: {title, l, s, pick(l,s)}  - without 
    each change as it happens. Everything else about the JSEA (status, crew, signatures) comes from the server. */
 function hasPending() { return G.writes > 0 || Object.keys(G.dirty).length > 0; }
 function isDirty(k) { return k in G.dirty; }
-function editable() { return !!(G.doc && G.doc.status === 'draft' && G.doc.open); }
+function editable() { var d = G.doc; return !!(d && d.open && (d.status === 'draft' || (d.status === 'review' && d.reviewerId === G.me))); }   // during review only the reviewer edits
 function stepOf(id) { return G.doc.steps.filter(function (x) { return x.id === id; })[0]; }
 function getVal(k) {
   var p = k.split(':'), d = G.doc, st, hz, am;
@@ -3439,7 +3439,7 @@ function poll(force) {
     if (G.again) { G.again = false; poll(true); }
   }, function (e) {
     G.polling = false; G.again = false;
-    if (/no longer valid/.test(e.message)) { if (!G.token) return;      // already signed out here (for example after cancelling or leaving)
+    if (/no longer valid|was cancelled/.test(e.message)) { if (!G.token) return;      // already signed out here (for example after cancelling or leaving)
       G.token = null; store('jsea_tok_' + G.code, null); G.doc = null; G.L.close(); G.room = null; fail(e); showJoin(); }
   });
 }
@@ -3659,7 +3659,7 @@ function signOutDevice() {
 }
 function drawMain0() {
   var d = G.doc, m = document.getElementById('main'), bar = document.getElementById('bar'), html = '';
-  if (d.status !== 'draft') { m.innerHTML = waiting(); bar.innerHTML = waitingBar(); return; }
+  if (d.status !== 'draft' && !editable()) { m.innerHTML = waiting(); bar.innerHTML = waitingBar(); return; }   // (a reviewer who is editing gets the form)
   if (!d.open) { m.innerHTML = lockedView(); bar.innerHTML = '<div class="bar"><button class="btn ghost" data-act="unlock">Unlock to make changes</button></div>'; return; }
   if (d.returnNote) html += '<div class="note ret"><b>Returned by ' + h(d.returnNote.role.toLowerCase() + ' ' + d.returnNote.by) + '</b>' + h(d.returnNote.note) + '<br><small>' + when(d.returnNote.at) + ' · fix the JSEA, then everyone signs on again and the preparer resubmits.</small></div>';
   if (d.amending) html += '<div class="note info"><b>SWMS amendment ' + d.version + '</b>' + h(d.session.amend || 'Update the job steps, hazards and controls for the changed conditions, then record each change on the Sign tab.') + '</div>';
@@ -3809,6 +3809,12 @@ function submitCard(d) {
 /** Sign tab while the JSEA is still open for editing. */
 function signTab() {
   var d = G.doc, html = '';
+  if (d.status === 'review') {                         // the reviewer is editing: no sign-on here, just finish and go back to the review
+    var left = d.issues.filter(function (i) { return i.level === 'error' && i.sec !== 'sign'; }).length;
+    return '<div class="card"><h2>Check list</h2><div id="issues">' + issueList(d.issues.filter(function (i) { return i.sec !== 'sign'; })) + '</div></div>' +
+      '<div class="card"><h2>Finish editing</h2><p class="hint">You are editing as the reviewer. The crew does not need to sign on again; the history records that you made changes. When you are done, go back to the review and sign.</p>' +
+      '<button class="btn block ok" id="revdone" data-act="revDone"' + (left ? ' disabled' : '') + '>Done editing</button></div>';
+  }
   if (d.amending || d.amendments.length) html += amendCard(d, d.amending);
   html += '<div class="card"><h2>Check list</h2><div id="issues">' + issueList(d.issues.filter(function (i) { return i.sec !== 'sign'; })) + '</div><div id="aiw">' + aiCard(d) + '</div></div>';
   html += '<div class="card"><h2>' + (d.mode === 'crew' ? 'Crew sign on' : 'Sign on') + '</h2>' +
@@ -3882,10 +3888,9 @@ function revAiCard(d) {
   else if (st && st.err) body = '<p class="hint" style="color:var(--err)">The AI check did not run: ' + h(st.err) + '</p><button class="btn small ghost" data-act="revAiRun">Try again</button>';
   else {
     var list = tAiFindings(d);
-    body = (list.length ? '<ul class="aif">' + list.map(function (x, i) {
-      return '<li><label><input type="checkbox" class="aitick" data-i="' + i + '"' + (G.aiTicks && G.aiTicks[d.id + ':' + i] ? ' checked' : '') + '><span><b>' + h(x.where) + ':</b> ' + h(x.msg) + '</span></label></li>';
-    }).join('') + '</ul><p class="hint">Tick the findings you agree with, then tap “Return with notes”. They are added to your note, where you can edit them.</p>'
-      : '<p class="hint">Nothing flagged in the hazards and controls.</p>') + '<p class="hint">A guide only. You are the reviewer: read the JSEA yourself before you sign.</p>';
+    body = (list.length ? '<ul class="aif">' + list.map(function (x) { return '<li><label><span><b>' + h(x.where) + ':</b> ' + h(x.msg) + '</span></label></li>'; }).join('') +
+      '</ul><p class="hint">If you agree with a finding, tap “Edit the JSEA” and fix it.</p>' : '<p class="hint">Nothing flagged in the hazards and controls.</p>') +
+      '<p class="hint">A guide only. You are the reviewer: read the JSEA yourself before you sign.</p>';
   }
   return '<div class="card aicard"><h2>AI check findings</h2>' + body + '</div>';
 }
@@ -3896,14 +3901,14 @@ function reviewPrompt() {
   G.revOpen = true;
   var n = 0, ring = function () { if (soundOn()) try { chime(); } catch (e) {} try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (e) {} };
   ring(); var t = setInterval(function () { if (++n > 5 || !document.body.contains(m)) return clearInterval(t); ring(); }, 20000);
-  var m = modal('<h2>You are the reviewer</h2><p style="font-size:16px;margin:6px 0 4px">' + h(d.crewName || 'Your crew') + ' has submitted the JSEA and chose you to review it.</p><p class="hint">Read the whole JSEA, then sign it to pass it to the trainer, or return it with notes.</p><div class="acts"><button class="btn block" data-close>Start the review</button></div>');
+  var m = modal('<h2>You are the reviewer</h2><p style="font-size:16px;margin:6px 0 4px">' + h(d.crewName || 'Your crew') + ' has submitted the JSEA and chose you to review it.</p><p class="hint">Read the whole JSEA. Fix anything that needs it with “Edit the JSEA”, then sign it to pass it to the trainer.</p><div class="acts"><button class="btn block" data-close>Start the review</button></div>');
   m.classList.add('urgent');
   m.addEventListener('click', function () { if (!document.body.contains(m)) { clearInterval(t); store(key, '1'); G.revOpen = false; window.scrollTo(0, 0); } });
 }
 function waiting() {
   var d = G.doc, head = '', rev = (d.members.filter(function (m) { return m.id === d.reviewerId; })[0] || {}).name;
-  if (d.status === 'review' && d.reviewerId === G.me) head = '<div class="note info"><b>You are the reviewer</b>Read the whole JSEA. Check that the steps are in a sensible order, every hazard is identified, the risk ratings are realistic and the controls actually reduce the risk. Then pass it to the trainer, or return it with notes.<br><button class="link" data-act="matrix">Open the risk matrix</button></div>' + revAiCard(d);
-  else if (d.status === 'review') head = '<div class="note info"><b>With the reviewer</b>' + h(rev) + ' is reviewing the JSEA. You will be notified here when it moves on or is returned.</div>';
+  if (d.status === 'review' && d.reviewerId === G.me) head = '<div class="note info"><b>You are the reviewer</b>Read the whole JSEA. Check that the steps are in a sensible order, every hazard is identified, the risk ratings are realistic and the controls actually reduce the risk. If something needs fixing, tap “Edit the JSEA” and correct it yourself. Then sign to pass it to the trainer.<br><button class="link" data-act="matrix">Open the risk matrix</button></div>' + revAiCard(d);
+  else if (d.status === 'review') head = '<div class="note info"><b>With the reviewer</b>' + h(rev) + ' is reviewing the JSEA and can make corrections. You will be notified here when it moves on.</div>';
   else if (d.status === 'approval') head = '<div class="note info"><b>With the trainer</b>Waiting for ' + h(d.session.trainer) + ' to ' + (d.mode === 'crew' ? 'approve' : 'review and approve') + ' the JSEA. Keep this page open – you will be notified here.</div>';
   else head = '<div class="note good"><b>Approved' + (d.version ? ' (amendment ' + d.version + ')' : '') + '</b>' + (d.pdf && !d.pdfPending ? 'The signed JSEA on the EIM form has been emailed to ' + h((d.members.filter(function (m) { return m.id === G.me; })[0] || {}).email) + '. Upload the PDF to Cloud Assess.' : 'Your trainer is issuing the PDF. It will be emailed to you shortly.') + '</div>' +
     (d.session.amend && !d.version ? '<div class="note info"><b>Next: amend this JSEA</b>' + h(d.session.amend) + '</div>' : '');
@@ -3911,7 +3916,7 @@ function waiting() {
 }
 function waitingBar() {
   var d = G.doc, b = '';
-  if (d.status === 'review' && d.reviewerId === G.me) b = '<button class="btn err" data-act="revReturn">Return with notes</button><button class="btn ok" data-act="revPass">Reviewed – sign</button>';
+  if (d.status === 'review' && d.reviewerId === G.me) b = '<button class="btn ghost" data-act="revEdit">Edit the JSEA</button><button class="btn ok" data-act="revPass">Reviewed – sign</button>';
   else if (d.status !== 'approved' && isPrep()) b = '<button class="btn ghost" data-act="recall">Recall to make changes</button>';
   else if (d.status === 'approved') b = (d.pdf && !d.pdfPending ? '<button class="btn ghost" data-act="resend">Email me the PDF again</button>' : '') + (isPrep() ? '<button class="btn" data-act="amend">Amend JSEA</button>' : '');
   return b ? '<div class="bar">' + b + '</div>' : '';
@@ -4000,6 +4005,8 @@ document.addEventListener('click', function (e) {
   else if (a === 'recall') { confirm2('Recall the JSEA? Everyone will need to sign on again before you resubmit.', 'Recall').then(function () { act('recall').catch(fail); }); }
   else if (a === 'revPass') askSignature('Reviewed by ' + (d.members.filter(function (m) { return m.id === G.me; })[0] || {}).name, 'I have reviewed this JSEA and recommend it for approval.').then(function (st) { return act('review', { decision: 'pass', strokes: st }); }).then(function () { toast('Passed to the trainer for approval.', 'good'); }, fail);
   else if (a === 'revAiRun') revAiRun();
+  else if (a === 'revEdit') act('revEdit', {}).then(function () { G.tab = 'steps'; G.sig = null; refresh(); window.scrollTo(0, 0); toast('You can edit now. Tap “Done editing” on the Sign tab when finished.', '', 5000); }, fail);
+  else if (a === 'revDone') settle().then(function () { return act('revDone', {}); }).then(function () { G.revAi = null; G.sig = null; refresh(); window.scrollTo(0, 0); toast('Changes saved. Sign to pass the JSEA to the trainer.', 'good', 5000); }, fail);
   else if (a === 'revReturn') askNote('Return to the preparer', 'Explain what needs to be fixed. Be specific: which step, and why.',
     tAiFindings(d).filter(function (x, i) { return G.aiTicks && G.aiTicks[d.id + ':' + i]; }).map(function (x) { return '• ' + x.where + ': ' + x.msg; }).join('\n')).then(function (note) { return act('review', { decision: 'return', note: note }); }).then(function () { toast('Returned to the preparer.', ''); }, fail);
   else if (a === 'amend') { confirm2('Open an amendment? The JSEA is unlocked for changes, then goes through sign-on, review and approval again.', 'Open amendment').then(function () { act('amendStart').then(function () { G.tab = 'steps'; G.sig = null; refresh(); }, fail); }); }
@@ -4258,7 +4265,9 @@ function drawJsea() {
     bar = '<button class="btn ghost" data-act="tPdf">Preview PDF</button>';
   }
   if (d.returnNote && d.status === 'draft') head += '<div class="note ret"><b>Returned by ' + h(d.returnNote.role.toLowerCase() + ' ' + d.returnNote.by) + '</b>' + h(d.returnNote.note) + '</div>';
-  document.getElementById('main').innerHTML = head + tAiCard(d) + summaryHtml(d, true);
+  if (d.status === 'cancelled') head = '<div class="note warn"><b>Cancelled</b>This JSEA was cancelled' + (d.cancelledBy ? ' by ' + h(d.cancelledBy) : ' by the student') + '. It is kept here for the record.</div>';
+  var cancelLink = d.status !== 'approved' && d.status !== 'cancelled' && !d.version && !d.amending ? '<p class="who"><button class="link red" data-act="tCancelJsea">Cancel this JSEA</button> · signs everyone in it out and sends them back to the join page</p>' : '';
+  document.getElementById('main').innerHTML = head + tAiCard(d) + summaryHtml(d, true) + cancelLink;
   document.querySelectorAll('.aitick').forEach(function (c) { c.onchange = function () { G.aiTicks = G.aiTicks || {}; G.aiTicks[d.id + ':' + c.dataset.i] = c.checked; }; });
   document.getElementById('bar').innerHTML = '<div class="bar">' + bar + '</div>';
 }
@@ -4387,6 +4396,8 @@ function trainerClick(a, id, b) {
     }).then(function (r) { G.tDoc = r.doc; drawJsea(); return sendPdf(); }).catch(function (e) { finClose(false); G.tActing = false; tFail(e); tJsea(d.id, true); });
   }
   else if (a === 'tAiRun') tAiRun();
+  else if (a === 'tCancelJsea') confirm2('Cancel this JSEA?\n\n' + d.members.map(function (m) { return m.name; }).join(', ') + ' will be signed out and sent back to the join page, where they can join a crew or start again. The JSEA is kept in this list as cancelled and cannot be reopened.', 'Yes, cancel this JSEA')
+    .then(function () { return rpc('tCancel', { tt: G.tt, id: d.id }); }).then(function (r) { G.tDoc = r.doc; toast('JSEA cancelled.', 'good'); tPendLoad(); tSession(d.sessionId); }, tFail);
   else if (a === 'tReturn') askNote('Return to ' + (d.mode === 'crew' ? d.crewName : d.members[0].name), 'The students see this note at the top of their JSEA. Be specific about what to fix.',
     tAiFindings(d).filter(function (x, i) { return G.aiTicks && G.aiTicks[d.id + ':' + i]; }).map(function (x) { return '• ' + x.where + ': ' + x.msg; }).join('\n')).then(function (note) { return rpc('decide', { tt: G.tt, id: d.id, rev: d.rev, decision: 'return', note: note }); }).then(function (r) { toast('Returned to the student' + (d.members.length > 1 ? 's' : '') + '.', ''); tSession(G.tSess.id); }, function (e) { tFail(e); tJsea(d.id, true); });
   else if (a === 'tPdf') { toast('Building the PDF…', '', 15000); makePdf(d).then(function (bytes) {
