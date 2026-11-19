@@ -279,6 +279,7 @@ body.waiting .btn.block.wait{display:flex}
 .modal.urgent{background:rgba(16,24,40,.72)}.modal.urgent .sheet{border-top:6px solid var(--blue)}
 .status.cancelled{background:#eceef2;color:#667085}.jrow.gone{opacity:.6;background:#f6f7f9}.jrow.gone .n{text-decoration:line-through;text-decoration-color:#98a2b3}
 .who .link.red{color:var(--err)}
+@media (max-width:560px){.bar{flex-wrap:wrap}.bar .btn,.bar .btn.ghost{flex:1 1 44%;max-width:none}}
 </style>
 </head>
 <body>
@@ -4089,6 +4090,25 @@ function tPendDraw() {
   e.dataset.sig = sig;
   top.parentNode.insertBefore(e, top.nextSibling);
 }
+/* The trainer changes their own PIN. The PIN is typed by the trainer and checked on the server. */
+function tPinDialog() {
+  var m = modal('<h2>Change my PIN</h2><p class="hint">Signed in as ' + h(G.T.name) + '. Use 4 to 8 digits.</p>' +
+    '<label>Current PIN</label><input type="password" inputmode="numeric" autocomplete="off" id="p0" maxlength="8">' +
+    '<label>New PIN</label><input type="password" inputmode="numeric" autocomplete="off" id="p1" maxlength="8">' +
+    '<label>New PIN again</label><input type="password" inputmode="numeric" autocomplete="off" id="p2" maxlength="8">' +
+    '<p class="hint" id="pmsg" style="color:var(--err);min-height:18px"></p>' +
+    '<div class="acts"><button class="btn ghost" data-close>Cancel</button><button class="btn" id="pok">Change PIN</button></div>');
+  var q = function (id) { return m.querySelector('#' + id); }, say = function (t) { q('pmsg').textContent = t; };
+  q('p0').focus();
+  q('pok').onclick = function () {
+    var a = q('p0').value.trim(), b = q('p1').value.trim(), c = q('p2').value.trim();
+    if (!a) return say('Enter your current PIN.');
+    if (!/^\d{4,8}$/.test(b)) return say('The new PIN must be 4 to 8 digits.');
+    if (b !== c) return say('The two new PINs do not match.');
+    say('');
+    rpc('changePin', { tt: G.tt, oldPin: a, newPin: b }).then(function () { m.remove(); toast('PIN changed. Use the new PIN next time you sign in.', 'good', 5000); }, function (e) { say(e.message || String(e)); });
+  };
+}
 function tHome() {
   tPendStart();
   G.tPoll = null; G.tSess = null; if (G.TL) G.TL.close();
@@ -4113,7 +4133,7 @@ function tHome() {
     '<label>Site / area</label><select id="ss">' + (G.T.sites || []).map(function (x) { return '<option' + (x.name === lastSite ? ' selected' : '') + '>' + h(x.name) + '</option>'; }).join('') + '<option value=""' + (lastSite && !lastKnown ? ' selected' : '') + '>Other (type it)</option></select><div id="xso"></div><p class="hint" id="pmt"></p>' +
     '<label>Date on the JSEA</label><input type="text" id="sd" value="' + today + '">' +
     '<label>Who prepares the JSEA?</label><select id="sm"><option value="crew">Work crews</option><option value="individual">Individual</option><option value="both">Students choose: work crew or individual</option></select>' +
-    '<p></p><button class="btn block" data-act="tCreate">Create QR code</button><p class="hint">Emails left today: ' + (G.T.quota < 0 ? 'unknown' : G.T.quota) + ' · <a href="' + h(G.T.sheetUrl) + '" target="_blank" rel="noopener">Open settings sheet (catalogue, units, trainers, records)</a></p></div></div>' +
+    '<p></p><button class="btn block" data-act="tCreate">Create QR code</button><p class="hint">Emails left today: ' + (G.T.quota < 0 ? 'unknown' : G.T.quota) + ' · <button class="link" data-act="tPin">Change my PIN</button></p></div></div>' +
     '<div><div class="card"><h2>Sessions</h2><div id="sl"><span class="spin"></span></div></div></div></div></div>';
   var su = document.getElementById('su'), st = document.getElementById('st'), ss = document.getElementById('ss');
   var firstWith = units.filter(function (u) { return has[u.code]; }).sort(function (x, y) { return x.code < y.code ? -1 : 1; })[0]; if (firstWith) su.value = firstWith.code;
@@ -4256,18 +4276,17 @@ function drawJsea() {
   if (t) t.innerHTML = '<b>' + h(d.mode === 'crew' ? d.crewName : d.members[0].name) + '</b><span>' + h((d.ref ? d.ref + ' · ' : '') + d.session.unit + ' ' + d.session.assess) + ' · ' + ({ draft: d.open ? 'being prepared' : 'locked for sign-on', review: 'with the student reviewer', approval: 'waiting for you', approved: 'approved', cancelled: 'cancelled by the student' })[d.status] + '</span>';
   if (d.status === 'approval') {
     head = '<div class="note info"><b>' + (d.mode === 'crew' ? 'Approve' : 'Review and approve') + (d.version ? ' amendment ' + d.version : '') + '</b>' + (d.mode === 'crew' ? 'Reviewed by ' + h(d.review ? d.review.name : '') + '. ' : 'Individual JSEA: your signature goes in both Reviewed by and Approved by. ') + 'Review no. ' + d.cycle + '. <button class="link" data-act="matrix">Risk matrix</button></div>';
-    bar = '<button class="btn ghost" data-act="tPdf">Preview PDF</button><button class="btn err" data-act="tReturn">Return with notes</button><button class="btn ok" data-act="tApprove">Approve and sign</button>';
+    bar = '<button class="btn ghost" data-act="tPdf">Preview PDF</button>' + (!d.version && !d.amending ? '<button class="btn ghost danger" data-act="tCancelJsea">Cancel JSEA</button>' : '') + '<button class="btn err" data-act="tReturn">Return with notes</button><button class="btn ok" data-act="tApprove">Approve and sign</button>';
   } else if (d.status === 'approved') {
     head = d.pdfPending ? '<div class="note warn"><b>Approved, but the PDF has not been sent</b>Tap “Send PDF” to build the form and email it to the students.</div>' : '<div class="note good"><b>Approved and issued</b>PDF emailed ' + when(d.pdf.at) + '.' + (/^[\w-]{20,}$/.test(d.pdf.fileId) ? ' <a href="https://drive.google.com/file/d/' + h(d.pdf.fileId) + '/view" target="_blank" rel="noopener">Open the PDF in Drive</a>' : '') + '</div>';
     bar = '<button class="btn ghost" data-act="tPdf">Download PDF</button><button class="btn" data-act="tSend">' + (d.pdfPending ? 'Send PDF' : 'Send PDF again') + '</button>';
   } else {
     head = '<div class="note info"><b>' + (d.status === 'review' ? 'With the student reviewer' : d.open ? 'Still being prepared' : 'Locked for sign-on') + '</b>You can read it now' + (d.open ? ' (this is the draft as it stood when you opened it)' : '') + '. It will appear in your queue when it is submitted for approval.</div>';
-    bar = '<button class="btn ghost" data-act="tPdf">Preview PDF</button>';
+    bar = '<button class="btn ghost" data-act="tPdf">Preview PDF</button>' + (d.status !== 'cancelled' && !d.version && !d.amending ? '<button class="btn ghost danger" data-act="tCancelJsea">Cancel JSEA</button>' : '');
   }
   if (d.returnNote && d.status === 'draft') head += '<div class="note ret"><b>Returned by ' + h(d.returnNote.role.toLowerCase() + ' ' + d.returnNote.by) + '</b>' + h(d.returnNote.note) + '</div>';
   if (d.status === 'cancelled') head = '<div class="note warn"><b>Cancelled</b>This JSEA was cancelled' + (d.cancelledBy ? ' by ' + h(d.cancelledBy) : ' by the student') + '. It is kept here for the record.</div>';
-  var cancelLink = d.status !== 'approved' && d.status !== 'cancelled' && !d.version && !d.amending ? '<p class="who"><button class="link red" data-act="tCancelJsea">Cancel this JSEA</button> · signs everyone in it out and sends them back to the join page</p>' : '';
-  document.getElementById('main').innerHTML = head + tAiCard(d) + summaryHtml(d, true) + cancelLink;
+  document.getElementById('main').innerHTML = head + tAiCard(d) + summaryHtml(d, true);
   document.querySelectorAll('.aitick').forEach(function (c) { c.onchange = function () { G.aiTicks = G.aiTicks || {}; G.aiTicks[d.id + ':' + c.dataset.i] = c.checked; }; });
   document.getElementById('bar').innerHTML = '<div class="bar">' + bar + '</div>';
 }
@@ -4396,6 +4415,7 @@ function trainerClick(a, id, b) {
     }).then(function (r) { G.tDoc = r.doc; drawJsea(); return sendPdf(); }).catch(function (e) { finClose(false); G.tActing = false; tFail(e); tJsea(d.id, true); });
   }
   else if (a === 'tAiRun') tAiRun();
+  else if (a === 'tPin') tPinDialog();
   else if (a === 'tCancelJsea') confirm2('Cancel this JSEA?\n\n' + d.members.map(function (m) { return m.name; }).join(', ') + ' will be signed out and sent back to the join page, where they can join a crew or start again. The JSEA is kept in this list as cancelled and cannot be reopened.', 'Yes, cancel this JSEA')
     .then(function () { return rpc('tCancel', { tt: G.tt, id: d.id }); }).then(function (r) { G.tDoc = r.doc; toast('JSEA cancelled.', 'good'); tPendLoad(); tSession(d.sessionId); }, tFail);
   else if (a === 'tReturn') askNote('Return to ' + (d.mode === 'crew' ? d.crewName : d.members[0].name), 'The students see this note at the top of their JSEA. Be specific about what to fix.',
