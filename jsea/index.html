@@ -277,6 +277,8 @@ body.waiting .btn.block.wait{display:flex}
 .aif input{width:22px;height:22px;flex:none;margin:1px 0 0}
 .spin.dark{display:inline-block;width:14px;height:14px;border-radius:50%;border:2px solid rgba(27,47,110,.25);border-top-color:var(--navy);animation:spin .7s linear infinite;vertical-align:-2px;margin-right:6px}
 .modal.urgent{background:rgba(16,24,40,.72)}.modal.urgent .sheet{border-top:6px solid var(--blue)}
+.status.cancelled{background:#eceef2;color:#667085}.jrow.gone{opacity:.6;background:#f6f7f9}.jrow.gone .n{text-decoration:line-through;text-decoration-color:#98a2b3}
+.who .link.red{color:var(--err)}
 </style>
 </head>
 <body>
@@ -3437,7 +3439,8 @@ function poll(force) {
     if (G.again) { G.again = false; poll(true); }
   }, function (e) {
     G.polling = false; G.again = false;
-    if (/no longer valid/.test(e.message)) { G.token = null; store('jsea_tok_' + G.code, null); G.doc = null; G.L.close(); G.room = null; fail(e); showJoin(); }
+    if (/no longer valid/.test(e.message)) { if (!G.token) return;      // already signed out here (for example after cancelling or leaving)
+      G.token = null; store('jsea_tok_' + G.code, null); G.doc = null; G.L.close(); G.room = null; fail(e); showJoin(); }
   });
 }
 /* Firebase pushes changes as they happen. This slow check is only a safety net if a push is missed. */
@@ -3535,7 +3538,7 @@ function showPin() { var e = document.getElementById('pinv'); if (e) e.textConte
 /* ------------------------------------------------------------ student: screens */
 function isPrep() { return G.doc.preparerId === G.me; }
 function statusChip(d) {
-  var t = { draft: d.returnNote ? 'Returned' : d.amending ? 'Amending' : 'Preparing', review: 'With reviewer', approval: 'With trainer', approved: 'Approved' }[d.status];
+  var t = { draft: d.returnNote ? 'Returned' : d.amending ? 'Amending' : 'Preparing', review: 'With reviewer', approval: 'With trainer', approved: 'Approved', cancelled: 'Cancelled' }[d.status];
   return '<span class="status ' + (d.status === 'draft' && d.returnNote ? 'returned' : d.status) + '">' + t + '</span>';
 }
 function drawTop() {
@@ -3631,7 +3634,20 @@ function drawMain() {
   drawMain0();
   document.querySelectorAll('#main .aitick').forEach(function (c) { c.onchange = function () { G.aiTicks = G.aiTicks || {}; G.aiTicks[G.doc.id + ':' + c.dataset.i] = c.checked; }; });
   var d = G.doc, me = d && d.members.filter(function (m) { return m.id === G.me; })[0], m = document.getElementById('main');
-  if (me && m) m.insertAdjacentHTML('beforeend', '<p class="who">Signed in as <b>' + h(me.name) + '</b> · <button class="link" data-act="notMe">Not you? Sign out</button></p>');
+  if (me && m) m.insertAdjacentHTML('beforeend', '<p class="who">Signed in as <b>' + h(me.name) + '</b> · <button class="link" data-act="notMe">Not you? Sign out</button>' +
+    (d.status === 'draft' && !d.version && !d.amending ? ' · <button class="link red" data-act="leave">' + (d.members.length > 1 ? 'Leave this crew' : 'Cancel this JSEA') + '</button>' : '') + '</p>');
+}
+/** Cancel my JSEA (when I am the only one on it) or leave the crew, so I can join another crew or start again. */
+function leaveJsea() {
+  var d = G.doc, solo = d.members.length === 1, prep = d.preparerId === G.me;
+  var next = !solo && prep ? d.members.filter(function (m) { return m.id !== G.me; })[0] : null;
+  confirm2(solo ? 'Cancel this JSEA?\n\nEverything entered in it is discarded and it cannot be reopened. You can then join a crew or start a new JSEA.'
+    : 'Leave ' + (d.crewName || 'this crew') + '?\n\nThe JSEA stays with the rest of the crew' + (next ? ', and ' + next.name + ' becomes the preparer' : '') + '. Anyone who has signed on will need to sign again. You can then join another crew or start your own JSEA.',
+    solo ? 'Yes, cancel this JSEA' : 'Yes, leave the crew').then(settle).then(function () { return rpc('leave', { token: G.token }); }).then(function (r) {
+    store('jsea_tok_' + G.code, null); store('jsea_me_' + G.code, null);
+    G.token = null; G.me = null; G.doc = null; G.sig = null; G.dirty = {}; if (G.L) G.L.close(); G.room = null;
+    showJoin(); toast(r.cancelled ? 'JSEA cancelled. You can join a crew or start again.' : 'You have left the crew.', 'good', 5000);
+  }, fail);
 }
 /** Forgets this person on this device. The JSEA itself is untouched: the same student ID and email get back in. */
 function signOutDevice() {
@@ -3989,6 +4005,7 @@ document.addEventListener('click', function (e) {
   else if (a === 'amend') { confirm2('Open an amendment? The JSEA is unlocked for changes, then goes through sign-on, review and approval again.', 'Open amendment').then(function () { act('amendStart').then(function () { G.tab = 'steps'; G.sig = null; refresh(); }, fail); }); }
   else if (a === 'amendAdd') addAmend();
   else if (a === 'notMe') signOutDevice();
+  else if (a === 'leave') leaveJsea();
   else if (a === 'amendDel') tracked(G.L.remove('draft/am/' + id));
   else if (a === 'unlock') { confirm2('Unlock the JSEA to make changes? Every signature is cleared and everyone signs on again.', 'Unlock').then(function () { act('unlock').then(function () { G.tab = 'steps'; G.sig = null; refresh(); }, fail); }); }
   else if (a === 'resend') act('resend').then(function (r) { toast('Sent to ' + r.sent, 'good'); }, fail);
@@ -4167,7 +4184,7 @@ function tSession(id) {
   };
   G.tPoll();
 }
-var ORDER = { approval: 0, review: 1, draft: 2, approved: 3 };
+var ORDER = { approval: 0, review: 1, draft: 2, approved: 3, cancelled: 4 };
 function drawSession() {
   var s = G.tSess.s, docs = G.tSess.docs.slice().sort(function (a, b) { return (a.pdfPending ? -1 : ORDER[a.status]) - (b.pdfPending ? -1 : ORDER[b.status]) || (a.updated < b.updated ? 1 : -1); });
   var t = document.querySelector('.top .t'); if (t) t.innerHTML = '<b>' + h(s.unit + ' ' + s.assess) + '</b><span>' + h([s.unitTitle, s.task, s.siteArea, s.cohort].filter(Boolean).join(' · ')) + '</span>';
@@ -4177,10 +4194,10 @@ function drawSession() {
     (s.status !== 'open' ? '<button class="btn block ghost danger" data-act="tDelete">Delete session</button><p></p>' : '') +
     '<button class="btn block ghost" data-act="tSite">Change site / area</button><p class="hint">Site: ' + h(s.siteArea || s.site) + ' · permit prefix ' + h(s.siteCode || '') + '</p><p class="hint">Emails left today: ' + (G.T.quota < 0 ? 'unknown' : G.T.quota) + '</p></div>';
   var n = function (st) { return docs.filter(function (d) { return d.status === st; }).length; };
-  document.getElementById('cnt').textContent = docs.length ? '· ' + n('draft') + ' preparing · ' + n('review') + ' in review · ' + n('approval') + ' for approval · ' + n('approved') + ' approved' : '';
+  document.getElementById('cnt').textContent = docs.length ? '· ' + n('draft') + ' preparing · ' + n('review') + ' in review · ' + n('approval') + ' for approval · ' + n('approved') + ' approved' + (n('cancelled') ? ' · ' + n('cancelled') + ' cancelled' : '') : '';
   document.getElementById('jl').innerHTML = docs.length ? docs.map(function (d) {
     var todo = d.status === 'approval' || d.pdfPending;
-    return '<button class="jrow' + (todo ? ' todo' : '') + '" data-act="tOpenJsea" data-id="' + d.id + '"><div class="n">' + h(d.mode === 'crew' ? d.crewName + ': ' : '') + h(d.names.join(', ')) +
+    return '<button class="jrow' + (todo ? ' todo' : '') + (d.status === 'cancelled' ? ' gone' : '') + '" data-act="tOpenJsea" data-id="' + d.id + '"><div class="n">' + h(d.mode === 'crew' ? d.crewName + ': ' : '') + h(d.names.join(', ')) +
       '<small>' + h(d.permit ? 'Permit ' + d.permit + ' · ' : '') + (d.mode === 'crew' ? 'Work crew' : 'Individual') + ' · ' + d.steps + ' steps' + (d.warns ? ' · ' + d.warns + ' to check' : '') + (d.reviewer && d.status === 'review' ? ' · reviewer ' + h(d.reviewer) : '') + (d.version ? ' · amendment ' + d.version : '') + ' · ' + when(d.updated) + '</small></div>' +
       (d.pdfPending ? '<span class="status returned">PDF not sent</span>' : statusChip({ status: d.status, amending: d.amending, returnNote: null })) + '</button>';
   }).join('') : '<p class="hint">Waiting for students to scan the code…</p>';
@@ -4229,7 +4246,7 @@ function tAiCard(d) {
 }
 function drawJsea() {
   var d = G.tDoc, t = document.querySelector('.top .t'), head = '', bar = '';
-  if (t) t.innerHTML = '<b>' + h(d.mode === 'crew' ? d.crewName : d.members[0].name) + '</b><span>' + h((d.ref ? d.ref + ' · ' : '') + d.session.unit + ' ' + d.session.assess) + ' · ' + ({ draft: d.open ? 'being prepared' : 'locked for sign-on', review: 'with the student reviewer', approval: 'waiting for you', approved: 'approved' })[d.status] + '</span>';
+  if (t) t.innerHTML = '<b>' + h(d.mode === 'crew' ? d.crewName : d.members[0].name) + '</b><span>' + h((d.ref ? d.ref + ' · ' : '') + d.session.unit + ' ' + d.session.assess) + ' · ' + ({ draft: d.open ? 'being prepared' : 'locked for sign-on', review: 'with the student reviewer', approval: 'waiting for you', approved: 'approved', cancelled: 'cancelled by the student' })[d.status] + '</span>';
   if (d.status === 'approval') {
     head = '<div class="note info"><b>' + (d.mode === 'crew' ? 'Approve' : 'Review and approve') + (d.version ? ' amendment ' + d.version : '') + '</b>' + (d.mode === 'crew' ? 'Reviewed by ' + h(d.review ? d.review.name : '') + '. ' : 'Individual JSEA: your signature goes in both Reviewed by and Approved by. ') + 'Review no. ' + d.cycle + '. <button class="link" data-act="matrix">Risk matrix</button></div>';
     bar = '<button class="btn ghost" data-act="tPdf">Preview PDF</button><button class="btn err" data-act="tReturn">Return with notes</button><button class="btn ok" data-act="tApprove">Approve and sign</button>';
